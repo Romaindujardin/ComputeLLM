@@ -109,11 +109,11 @@ if "last_save_path" not in st.session_state:
 # =============================================================================
 # Sidebar Navigation
 # =============================================================================
-st.sidebar.markdown("## 🖥️ ComputeLLM")
+st.sidebar.markdown("## ComputeLLM")
 st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigation",
-    ["🏠 Matériel", "🚀 Benchmark", "📊 Résultats"],
+    ["Matériel", "Benchmark", "Résultats"],
     index=0,
 )
 st.sidebar.markdown("---")
@@ -126,13 +126,13 @@ st.sidebar.markdown("Multiplateforme (macOS / Windows)")
 # PAGE 1 : Détection Matérielle
 # =============================================================================
 def page_hardware():
-    st.markdown('<h1 class="main-header">🖥️ Détection Matérielle</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Détection Matérielle</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Analyse automatique de votre configuration</p>', unsafe_allow_html=True)
 
     # Bouton de détection
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("🔍 Détecter le matériel", use_container_width=True, type="primary"):
+        if st.button("Détecter le matériel", use_container_width=True, type="primary"):
             with st.spinner("Analyse du matériel en cours..."):
                 st.session_state.hardware_info = get_full_hardware_info()
 
@@ -143,7 +143,7 @@ def page_hardware():
     hw = st.session_state.hardware_info
 
     # --- Système d'exploitation ---
-    st.markdown("### 💻 Système d'exploitation")
+    st.markdown("### Système d'exploitation")
     os_info = hw["os"]
     cols = st.columns(4)
     cols[0].metric("OS", os_info["system"])
@@ -154,7 +154,7 @@ def page_hardware():
     st.markdown("---")
 
     # --- CPU ---
-    st.markdown("### ⚙️ Processeur (CPU)")
+    st.markdown("### Processeur (CPU)")
     cpu = hw["cpu"]
     cols = st.columns(4)
     cols[0].metric("Modèle", cpu.get("model", "Unknown"))
@@ -165,7 +165,7 @@ def page_hardware():
 
     if cpu.get("is_apple_silicon"):
         cols2 = st.columns(4)
-        cols2[0].metric("Type", "Apple Silicon ✅")
+        cols2[0].metric("Type", "Apple Silicon")
         perf = cpu.get("performance_cores", "?")
         eff = cpu.get("efficiency_cores", "?")
         cols2[1].metric("Cœurs Performance", perf)
@@ -176,7 +176,7 @@ def page_hardware():
     st.markdown("---")
 
     # --- Mémoire RAM ---
-    st.markdown("### 🧠 Mémoire RAM")
+    st.markdown("### Mémoire RAM")
     ram = hw["ram"]
     cols = st.columns(4)
     cols[0].metric("Total", f"{ram['total_gb']} Go")
@@ -191,7 +191,7 @@ def page_hardware():
     st.markdown("---")
 
     # --- GPU ---
-    st.markdown("### 🎮 GPU & Accélération")
+    st.markdown("### GPU & Accélération")
     gpu = hw["gpu"]
 
     if gpu["gpus"]:
@@ -220,29 +220,29 @@ def page_hardware():
         st.markdown("**Bibliothèques Python détectées :**")
         py_cols = st.columns(3)
         if py_backends.get("llama_cpp"):
-            py_cols[0].success(f"✅ llama-cpp-python {py_backends.get('llama_cpp_version', '')}")
+            py_cols[0].success(f"llama-cpp-python {py_backends.get('llama_cpp_version', '')}")
         else:
-            py_cols[0].error("❌ llama-cpp-python non installé")
+            py_cols[0].error("llama-cpp-python non installé")
 
         if py_backends.get("pytorch"):
             ver = py_backends.get("pytorch_version", "")
             cuda_str = f" (CUDA {py_backends['pytorch_cuda_version']})" if py_backends.get("pytorch_cuda") else ""
-            mps_str = " (MPS ✅)" if py_backends.get("pytorch_mps") else ""
-            py_cols[1].success(f"✅ PyTorch {ver}{cuda_str}{mps_str}")
+            mps_str = " (MPS)" if py_backends.get("pytorch_mps") else ""
+            py_cols[1].success(f"PyTorch {ver}{cuda_str}{mps_str}")
         else:
-            py_cols[1].warning("⚠️ PyTorch non installé (GPU benchmark indisponible)")
+            py_cols[1].warning("PyTorch non installé (GPU benchmark indisponible)")
 
     # Modèles compatibles
     st.markdown("---")
-    st.markdown("### 📦 Modèles LLM compatibles")
+    st.markdown("### Modèles LLM compatibles")
     ram_total = ram["total_gb"]
     compatible = get_compatible_models(ram_total)
 
     for key, model in AVAILABLE_MODELS.items():
         is_compat = key in compatible
         is_downloaded = is_model_downloaded(key)
-        icon = "✅" if is_compat else "❌"
-        dl_icon = "📥" if is_downloaded else "⬜"
+        icon = "" if is_compat else ""
+        dl_icon = "" if is_downloaded else ""
 
         cols = st.columns([0.5, 2, 1, 1, 1, 1])
         cols[0].write(icon)
@@ -253,7 +253,7 @@ def page_hardware():
         cols[5].write("Compatible" if is_compat else "Incompatible")
 
     # Export JSON brut
-    with st.expander("📋 Données brutes (JSON)"):
+    with st.expander("Données brutes (JSON)"):
         st.json(hw)
 
 
@@ -261,13 +261,13 @@ def page_hardware():
 # PAGE 2 : Benchmark
 # =============================================================================
 def page_benchmark():
-    st.markdown('<h1 class="main-header">🚀 Benchmark</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Benchmark</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Lancer l\'ensemble des benchmarks matériels et IA</p>', unsafe_allow_html=True)
 
     # Vérifier que le matériel a été détecté
     if st.session_state.hardware_info is None:
-        st.warning("⚠️ Veuillez d'abord détecter le matériel dans la page 'Matériel'.")
-        if st.button("🔍 Détecter le matériel maintenant"):
+        st.warning("Veuillez d'abord détecter le matériel dans la page 'Matériel'.")
+        if st.button("Détecter le matériel maintenant"):
             with st.spinner("Détection..."):
                 st.session_state.hardware_info = get_full_hardware_info()
             st.rerun()
@@ -276,7 +276,7 @@ def page_benchmark():
     hw = st.session_state.hardware_info
 
     # Configuration des benchmarks
-    st.markdown("### ⚙️ Configuration")
+    st.markdown("### Configuration")
 
     col1, col2 = st.columns(2)
 
@@ -309,7 +309,7 @@ def page_benchmark():
 
     # Résumé de la configuration
     backend_info = detect_best_backend()
-    st.markdown("### 📋 Résumé")
+    st.markdown("### Résumé")
     cols = st.columns(4)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
     cols[1].metric("Modèles sélectionnés", len(selected_models))
@@ -323,7 +323,7 @@ def page_benchmark():
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         launch = st.button(
-            "🚀 LANCER TOUS LES BENCHMARKS",
+            "LANCER TOUS LES BENCHMARKS",
             use_container_width=True,
             type="primary",
             disabled=st.session_state.benchmark_running,
@@ -340,7 +340,7 @@ def page_benchmark():
         # BENCHMARKS CLASSIQUES
         # ============================
         if any([run_classic, run_classic_mt, run_memory, run_gpu]):
-            st.markdown("### 📊 Benchmarks Classiques")
+            st.markdown("### Benchmarks Classiques")
             classic_progress = st.progress(0.0)
             classic_status = st.status("Benchmarks classiques en cours...", expanded=True)
 
@@ -356,11 +356,11 @@ def page_benchmark():
                     )
                     st.session_state.classic_results = classic_results
                     classic_status.update(
-                        label=f"✅ Benchmarks classiques terminés ({classic_results['total_time_s']:.1f}s)",
+                        label=f"Benchmarks classiques terminés ({classic_results['total_time_s']:.1f}s)",
                         state="complete"
                     )
                 except Exception as e:
-                    classic_status.update(label=f"❌ Erreur : {e}", state="error")
+                    classic_status.update(label=f"Erreur : {e}", state="error")
                     st.error(f"Erreur benchmarks classiques : {e}")
 
             classic_progress.progress(1.0)
@@ -371,7 +371,7 @@ def page_benchmark():
         # BENCHMARKS IA
         # ============================
         if selected_models:
-            st.markdown("### 🤖 Benchmarks IA (Inférence LLM)")
+            st.markdown("### Benchmarks IA (Inférence LLM)")
             ai_progress = st.progress(0.0)
             ai_status = st.status("Benchmarks IA en cours...", expanded=True)
 
@@ -384,12 +384,12 @@ def page_benchmark():
                 for model_key in selected_models:
                     if not is_model_downloaded(model_key):
                         model_info = AVAILABLE_MODELS[model_key]
-                        st.write(f"📥 Téléchargement de {model_info['name']}...")
+                        st.write(f"Téléchargement de {model_info['name']}...")
                         try:
                             download_model(model_key)
                             st.write(f"✅ {model_info['name']} téléchargé.")
                         except Exception as e:
-                            st.error(f"❌ Erreur téléchargement {model_info['name']}: {e}")
+                            st.error(f"Erreur téléchargement {model_info['name']}: {e}")
 
                 # Exécution des benchmarks
                 st.write("Exécution des inférences...")
@@ -400,11 +400,11 @@ def page_benchmark():
                     )
                     st.session_state.ai_results = ai_results
                     ai_status.update(
-                        label=f"✅ Benchmarks IA terminés ({ai_results['total_time_s']:.1f}s)",
+                        label=f"Benchmarks IA terminés ({ai_results['total_time_s']:.1f}s)",
                         state="complete"
                     )
                 except Exception as e:
-                    ai_status.update(label=f"❌ Erreur : {e}", state="error")
+                    ai_status.update(label=f"Erreur : {e}", state="error")
                     st.error(f"Erreur benchmarks IA : {e}")
 
             ai_progress.progress(1.0)
@@ -417,7 +417,7 @@ def page_benchmark():
         total_time = time.time() - total_start
 
         st.markdown("---")
-        st.markdown("### 💾 Sauvegarde")
+        st.markdown("### Sauvegarde")
 
         try:
             save_path = save_results(
@@ -426,9 +426,9 @@ def page_benchmark():
                 ai_results=st.session_state.ai_results,
             )
             st.session_state.last_save_path = str(save_path)
-            st.success(f"✅ Résultats sauvegardés : `{save_path.name}`")
+            st.success(f"Résultats sauvegardés : `{save_path.name}`")
         except Exception as e:
-            st.error(f"❌ Erreur sauvegarde : {e}")
+            st.error(f"Erreur sauvegarde : {e}")
 
         st.markdown(f"**Temps total : {total_time:.1f} secondes**")
 
@@ -438,7 +438,7 @@ def page_benchmark():
     # Afficher un résumé rapide si des résultats sont en session
     if st.session_state.classic_results or st.session_state.ai_results:
         st.markdown("---")
-        st.markdown("### 📋 Derniers résultats")
+        st.markdown("### Derniers résultats")
 
         if st.session_state.classic_results:
             benchmarks = st.session_state.classic_results.get("benchmarks", {})
@@ -494,14 +494,14 @@ def page_benchmark():
                             data.get("reason", "")
                         )
 
-        st.info("📊 Consultez la page **Résultats** pour une analyse détaillée.")
+        st.info("Consultez la page **Résultats** pour une analyse détaillée.")
 
 
 # =============================================================================
 # PAGE 3 : Résultats
 # =============================================================================
 def page_results():
-    st.markdown('<h1 class="main-header">📊 Résultats</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">Résultats</h1>', unsafe_allow_html=True)
     st.markdown('<p class="sub-header">Visualisation et comparaison des benchmarks</p>', unsafe_allow_html=True)
 
     # Charger la liste des résultats disponibles
@@ -512,7 +512,7 @@ def page_results():
         return
 
     # Sélection des résultats
-    st.markdown("### 📂 Résultats disponibles")
+    st.markdown("### Résultats disponibles")
 
     result_options = {
         r["filename"]: r for r in saved_results
@@ -555,12 +555,12 @@ def page_results():
 
     # Export
     st.markdown("---")
-    st.markdown("### 📤 Export")
+    st.markdown("### Export")
     for fname in selected_files:
         filepath = result_options[fname]["filepath"]
         col1, col2 = st.columns(2)
         with col1:
-            if st.button(f"📥 Télécharger JSON - {fname}", key=f"dl_json_{fname}"):
+            if st.button(f"Télécharger JSON - {fname}", key=f"dl_json_{fname}"):
                 with open(filepath, "r") as f:
                     st.download_button(
                         label=f"💾 {fname}",
@@ -570,12 +570,12 @@ def page_results():
                         key=f"download_{fname}",
                     )
         with col2:
-            if st.button(f"📥 Exporter CSV - {fname}", key=f"dl_csv_{fname}"):
+            if st.button(f"Exporter CSV - {fname}", key=f"dl_csv_{fname}"):
                 try:
                     csv_path = export_to_csv(filepath)
                     with open(csv_path, "r") as f:
                         st.download_button(
-                            label=f"💾 {csv_path.name}",
+                            label=f"{csv_path.name}",
                             data=f.read(),
                             file_name=csv_path.name,
                             mime="text/csv",
@@ -590,7 +590,7 @@ def _display_single_result(data: dict, filename: str):
     import plotly.graph_objects as go
     import plotly.express as px
 
-    st.markdown(f"### 🔍 Détails : {filename}")
+    st.markdown(f"### Détails : {filename}")
 
     # Info machine
     hw = data.get("hardware", {})
@@ -611,7 +611,7 @@ def _display_single_result(data: dict, filename: str):
     # === Benchmarks Classiques ===
     classic = data.get("classic_benchmarks", {}).get("benchmarks", {})
     if classic:
-        st.markdown("### ⚡ Benchmarks Classiques")
+        st.markdown("### Benchmarks Classiques")
 
         # Graphique GFLOPS CPU
         cpu_data_chart = {"Test": [], "GFLOPS": [], "Type": []}
@@ -691,7 +691,7 @@ def _display_single_result(data: dict, filename: str):
     ai = data.get("ai_benchmarks", {})
     ai_results = ai.get("results", {})
     if ai_results:
-        st.markdown("### 🤖 Benchmarks IA (Inférence LLM)")
+        st.markdown("### Benchmarks IA (Inférence LLM)")
 
         # Tableau récapitulatif
         table_data = {
@@ -769,7 +769,7 @@ def _display_single_result(data: dict, filename: str):
             st.plotly_chart(fig, use_container_width=True)
 
     # JSON brut
-    with st.expander("📋 Données brutes (JSON)"):
+    with st.expander("Données brutes (JSON)"):
         st.json(data)
 
 
@@ -779,7 +779,7 @@ def _display_comparison(loaded_data: dict):
     import plotly.express as px
     import pandas as pd
 
-    st.markdown("### ⚖️ Comparaison des résultats")
+    st.markdown("### Comparaison des résultats")
 
     # ─── Palette de couleurs distinctes et stables ───
     COLORS = [
@@ -826,7 +826,7 @@ def _display_comparison(loaded_data: dict):
     )
 
     # ─── Tableau comparatif matériel ───
-    st.markdown("#### 🖥️ Comparaison matérielle")
+    st.markdown("#### Comparaison matérielle")
     hw_table = {"Résultat": [], "CPU": [], "GPU": [], "RAM (Go)": [], "Backend": []}
     for fname, data in loaded_data.items():
         hw = data.get("hardware", {})
@@ -843,7 +843,7 @@ def _display_comparison(loaded_data: dict):
     # ══════════════════════════════════════════════
     # Comparaison CPU GFLOPS
     # ══════════════════════════════════════════════
-    st.markdown("#### ⚡ Comparaison CPU")
+    st.markdown("#### Comparaison CPU")
     has_cpu = False
     fig_cpu = go.Figure()
     for fname, data in loaded_data.items():
@@ -894,7 +894,7 @@ def _display_comparison(loaded_data: dict):
                 textposition="outside",
             ))
     if has_mem:
-        st.markdown("#### 🧠 Comparaison Mémoire")
+        st.markdown("#### Comparaison Mémoire")
         fig_mem.update_layout(
             barmode="group",
             title="Bande passante mémoire (Go/s)",
@@ -927,7 +927,7 @@ def _display_comparison(loaded_data: dict):
                     textposition="outside",
                 ))
     if has_gpu:
-        st.markdown("#### 🎮 Comparaison GPU")
+        st.markdown("#### Comparaison GPU")
         fig_gpu.update_layout(
             barmode="group",
             title="Performance GPU (GFLOPS)",
@@ -939,7 +939,7 @@ def _display_comparison(loaded_data: dict):
     # ══════════════════════════════════════════════
     # Comparaison Inférence IA
     # ══════════════════════════════════════════════
-    st.markdown("#### 🤖 Comparaison Inférence IA")
+    st.markdown("#### Comparaison Inférence IA")
 
     all_models = {}
     for fname, data in loaded_data.items():
@@ -1027,7 +1027,7 @@ def _display_comparison(loaded_data: dict):
         st.plotly_chart(fig_mem_ai, use_container_width=True)
 
         # Tableau comparatif
-        st.markdown("#### 📋 Tableau comparatif complet")
+        st.markdown("#### Tableau comparatif complet")
         ia_table = {
             "Résultat": [], "Modèle": [], "Tokens/s": [],
             "Latence 1er token (s)": [], "Mémoire pic (Go)": [],
@@ -1059,9 +1059,9 @@ def _display_comparison(loaded_data: dict):
 # =============================================================================
 # Router
 # =============================================================================
-if page == "🏠 Matériel":
+if page == "Matériel":
     page_hardware()
-elif page == "🚀 Benchmark":
+elif page == "Benchmark":
     page_benchmark()
-elif page == "📊 Résultats":
+elif page == "Résultats":
     page_results()
