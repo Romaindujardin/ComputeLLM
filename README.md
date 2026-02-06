@@ -12,7 +12,7 @@ ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de d
 
 ---
 
-## 📋 Fonctionnalités
+## Fonctionnalités
 
 - **Détection matérielle automatique** : OS, CPU (modèle, cœurs, fréquence), GPU (VRAM, backend), RAM (totale, disponible, unifiée)
 - **Benchmarks classiques** : CPU single-thread, CPU multi-thread, bande passante mémoire, GPU compute
@@ -26,7 +26,7 @@ ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de d
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ComputeLLM/
@@ -46,7 +46,7 @@ ComputeLLM/
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Prérequis
 
@@ -124,7 +124,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
 ---
 
-## 💻 Utilisation
+## Utilisation
 
 ### Interface graphique (recommandé)
 
@@ -140,9 +140,9 @@ python main.py
 
 L'interface Streamlit s'ouvre dans votre navigateur avec 3 pages :
 
-1. **🏠 Matériel** — Détection et affichage de la configuration
-2. **🚀 Benchmark** — Lancement avec un seul bouton
-3. **📊 Résultats** — Visualisation, comparaison et export
+1. **Matériel** — Détection et affichage de la configuration
+2. **Benchmark** — Lancement avec un seul bouton
+3. **Résultats** — Visualisation, comparaison et export
 
 ### Ligne de commande (CLI)
 
@@ -165,7 +165,7 @@ python main.py --detect
 
 ---
 
-## 📦 Modèles disponibles
+## Modèles disponibles
 
 | Clé              | Modèle                 | Paramètres | Taille (Q4_K_M) | RAM min |
 | ---------------- | ---------------------- | ---------- | --------------- | ------- |
@@ -179,7 +179,7 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ---
 
-## 📊 Métriques mesurées
+## Métriques mesurées
 
 ### Benchmarks classiques
 
@@ -211,7 +211,7 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ---
 
-## 📁 Exemple de résultat (JSON)
+## Exemple de résultat (JSON)
 
 ```json
 {
@@ -246,7 +246,7 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ---
 
-## 🔧 Configuration avancée
+## Configuration avancée
 
 Modifiez `src/config.py` pour ajuster :
 
@@ -258,7 +258,7 @@ Modifiez `src/config.py` pour ajuster :
 
 ---
 
-## 🤝 Contribuer
+## Contribuer
 
 1. Fork le dépôt
 2. Créer une branche : `git checkout -b feature/ma-feature`
@@ -268,13 +268,7 @@ Modifiez `src/config.py` pour ajuster :
 
 ---
 
-## 📜 Licence
-
-MIT License
-
----
-
-## ⚠️ Notes importantes
+## Notes importantes
 
 - Les modèles GGUF sont téléchargés dans le dossier `models/` (plusieurs Go par modèle).
 - L'inférence de gros modèles (34B, 70B) nécessite beaucoup de RAM.
