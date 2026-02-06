@@ -799,28 +799,24 @@ def _display_comparison(loaded_data: dict):
     for idx, (fname, data) in enumerate(loaded_data.items()):
         hw = data.get("hardware", {})
         cpu_short = hw.get("cpu", {}).get("model", "Unknown")
-        # Extraire un nom court du CPU (ex: "Apple M1", "i9-13900K")
         for prefix in ["Apple ", "Intel(R) Core(TM) ", "AMD Ryzen "]:
             if prefix in cpu_short:
                 cpu_short = cpu_short.split(prefix)[-1].split(" @")[0].split(" CPU")[0]
                 break
         timestamp = data.get("timestamp", "")[:16].replace("T", " ")
         label = f"{cpu_short} ({timestamp})"
-        # Éviter les doublons exacts
         if label in result_labels.values():
             label += f" #{idx+1}"
         result_labels[fname] = label
         result_colors[fname] = COLORS[idx % len(COLORS)]
 
-    # ─── Afficher la légende des couleurs ───
+    # ─── Légende couleurs ───
     legend_html = " &nbsp; ".join(
         f'<span style="display:inline-block;width:14px;height:14px;'
-        f'background:{color};border-radius:3px;margin-right:4px;'
+        f'background:{result_colors[f]};border-radius:3px;margin-right:4px;'
         f'vertical-align:middle;"></span>'
-        f'<span style="vertical-align:middle;font-weight:600;">{label}</span>'
-        for fname, label, color in [
-            (f, result_labels[f], result_colors[f]) for f in loaded_data
-        ]
+        f'<span style="vertical-align:middle;font-weight:600;">{result_labels[f]}</span>'
+        for f in loaded_data
     )
     st.markdown(
         f'<div style="background:#f0f2f6;padding:10px 16px;border-radius:8px;'
@@ -848,27 +844,14 @@ def _display_comparison(loaded_data: dict):
     # Comparaison CPU GFLOPS
     # ══════════════════════════════════════════════
     st.markdown("#### ⚡ Comparaison CPU")
-
-    # Collecter CPU ST et MT pour chaque résultat
     has_cpu = False
     fig_cpu = go.Figure()
     for fname, data in loaded_data.items():
         classic = data.get("classic_benchmarks", {}).get("benchmarks", {})
         cpu_st = classic.get("cpu_single_thread", {}).get("results", {})
         cpu_mt = classic.get("cpu_multi_thread", {}).get("results", {})
-
-        if cpu_st:
-            largest_key = list(cpu_st.keys())[-1]
-            st_gflops = cpu_st[largest_key].get("gflops", 0)
-        else:
-            st_gflops = 0
-
-        if cpu_mt:
-            largest_key = list(cpu_mt.keys())[-1]
-            mt_gflops = cpu_mt[largest_key].get("gflops", 0)
-        else:
-            mt_gflops = 0
-
+        st_gflops = list(cpu_st.values())[-1].get("gflops", 0) if cpu_st else 0
+        mt_gflops = list(cpu_mt.values())[-1].get("gflops", 0) if cpu_mt else 0
         if st_gflops or mt_gflops:
             has_cpu = True
             fig_cpu.add_trace(go.Bar(
@@ -879,7 +862,6 @@ def _display_comparison(loaded_data: dict):
                 text=[f"{st_gflops:.1f}", f"{mt_gflops:.1f}"],
                 textposition="outside",
             ))
-
     if has_cpu:
         fig_cpu.update_layout(
             barmode="group",
@@ -900,23 +882,17 @@ def _display_comparison(loaded_data: dict):
         ).get("results", {})
         if mem:
             has_mem = True
+            r_bw = mem.get("read", {}).get("bandwidth_gb_s", 0)
+            w_bw = mem.get("write", {}).get("bandwidth_gb_s", 0)
+            c_bw = mem.get("copy", {}).get("bandwidth_gb_s", 0)
             fig_mem.add_trace(go.Bar(
                 name=result_labels[fname],
                 x=["Lecture", "Écriture", "Copie"],
-                y=[
-                    mem.get("read", {}).get("bandwidth_gb_s", 0),
-                    mem.get("write", {}).get("bandwidth_gb_s", 0),
-                    mem.get("copy", {}).get("bandwidth_gb_s", 0),
-                ],
+                y=[r_bw, w_bw, c_bw],
                 marker_color=result_colors[fname],
-                text=[
-                    f"{mem.get('read', {}).get('bandwidth_gb_s', 0):.1f}",
-                    f"{mem.get('write', {}).get('bandwidth_gb_s', 0):.1f}",
-                    f"{mem.get('copy', {}).get('bandwidth_gb_s', 0):.1f}",
-                ],
+                text=[f"{r_bw:.1f}", f"{w_bw:.1f}", f"{c_bw:.1f}"],
                 textposition="outside",
             ))
-
     if has_mem:
         st.markdown("#### 🧠 Comparaison Mémoire")
         fig_mem.update_layout(
@@ -950,7 +926,6 @@ def _display_comparison(loaded_data: dict):
                     text=[f"{v:.0f}" for v in gflops_vals],
                     textposition="outside",
                 ))
-
     if has_gpu:
         st.markdown("#### 🎮 Comparaison GPU")
         fig_gpu.update_layout(
@@ -966,29 +941,26 @@ def _display_comparison(loaded_data: dict):
     # ══════════════════════════════════════════════
     st.markdown("#### 🤖 Comparaison Inférence IA")
 
-    # Collecter tous les modèles testés
     all_models = {}
     for fname, data in loaded_data.items():
         ai_results = data.get("ai_benchmarks", {}).get("results", {})
         for model_key, model_data in ai_results.items():
             if model_data.get("summary"):
-                model_name = model_data.get("model", model_key)
-                all_models[model_key] = model_name
+                all_models[model_key] = model_data.get("model", model_key)
 
     if all_models:
-        # ── Graphique global : Tokens/s par modèle ──
-        fig_tps = go.Figure()
-        fig_ftl = go.Figure()
         model_keys_sorted = sorted(all_models.keys())
         model_names_sorted = [all_models[k] for k in model_keys_sorted]
 
+        # Tokens/s
+        fig_tps = go.Figure()
+        fig_ftl = go.Figure()
         for fname, data in loaded_data.items():
             ai_results = data.get("ai_benchmarks", {}).get("results", {})
             tps_values = []
             ftl_values = []
             for model_key in model_keys_sorted:
-                model_data = ai_results.get(model_key, {})
-                summary = model_data.get("summary", {})
+                summary = ai_results.get(model_key, {}).get("summary", {})
                 tps_values.append(summary.get("avg_tokens_per_second", 0))
                 ftl_values.append(summary.get("avg_first_token_latency_s", 0))
 
@@ -1019,7 +991,6 @@ def _display_comparison(loaded_data: dict):
                 xaxis_title="Modèle",
             )
             st.plotly_chart(fig_tps, use_container_width=True)
-
         with col2:
             fig_ftl.update_layout(
                 barmode="group",
@@ -1030,16 +1001,14 @@ def _display_comparison(loaded_data: dict):
             )
             st.plotly_chart(fig_ftl, use_container_width=True)
 
-        # ── Graphique mémoire pic par modèle ──
+        # Mémoire pic
         fig_mem_ai = go.Figure()
         for fname, data in loaded_data.items():
             ai_results = data.get("ai_benchmarks", {}).get("results", {})
             mem_values = []
             for model_key in model_keys_sorted:
-                model_data = ai_results.get(model_key, {})
-                summary = model_data.get("summary", {})
+                summary = ai_results.get(model_key, {}).get("summary", {})
                 mem_values.append(summary.get("peak_memory_gb", 0))
-
             fig_mem_ai.add_trace(go.Bar(
                 name=result_labels[fname],
                 x=model_names_sorted,
@@ -1048,7 +1017,6 @@ def _display_comparison(loaded_data: dict):
                 text=[f"{v:.2f}" if v > 0 else "" for v in mem_values],
                 textposition="outside",
             ))
-
         fig_mem_ai.update_layout(
             barmode="group",
             title="Mémoire pic par modèle (Go)",
@@ -1058,7 +1026,7 @@ def _display_comparison(loaded_data: dict):
         )
         st.plotly_chart(fig_mem_ai, use_container_width=True)
 
-        # ── Tableau comparatif IA complet ──
+        # Tableau comparatif
         st.markdown("#### 📋 Tableau comparatif complet")
         ia_table = {
             "Résultat": [], "Modèle": [], "Tokens/s": [],
@@ -1080,7 +1048,6 @@ def _display_comparison(loaded_data: dict):
                         summary.get("peak_memory_gb", 0)
                     )
                     ia_table["Stabilité"].append(summary.get("stability", "?"))
-
         if ia_table["Résultat"]:
             st.dataframe(
                 pd.DataFrame(ia_table), use_container_width=True, hide_index=True
