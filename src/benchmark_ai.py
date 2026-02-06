@@ -1,0 +1,502 @@
+"""
+ComputeLLM - Module de benchmark IA (inférence LLM locale).
+Gère le téléchargement des modèles, l'exécution de l'inférence
+et la mesure des métriques de performance.
+"""
+
+import time
+import os
+import platform
+import gc
+from pathlib import Path
+from typing import Dict, Any, List, Optional, Callable
+from dataclasses import dataclass
+
+import numpy as np
+import psutil
+
+from src.config import (
+    AVAILABLE_MODELS,
+    MODELS_DIR,
+    BENCHMARK_PROMPT,
+    INFERENCE_CONFIG,
+)
+from src.benchmark_classic import ResourceMonitor, system_cleanup
+
+
+# =============================================================================
+# Gestion des modèles (téléchargement via HuggingFace Hub)
+# =============================================================================
+
+def list_available_models() -> Dict[str, Dict]:
+    """Retourne la liste des modèles disponibles pour le benchmark."""
+    return AVAILABLE_MODELS
+
+
+def get_compatible_models(ram_gb: float) -> Dict[str, Dict]:
+    """
+    Retourne les modèles compatibles avec la RAM disponible.
+    
+    Args:
+        ram_gb: RAM disponible en Go.
+    """
+    compatible = {}
+    for key, model in AVAILABLE_MODELS.items():
+        if model["min_ram_gb"] <= ram_gb:
+            compatible[key] = model
+    return compatible
+
+
+def is_model_downloaded(model_key: str) -> bool:
+    """Vérifie si un modèle est déjà téléchargé localement."""
+    if model_key not in AVAILABLE_MODELS:
+        return False
+    model = AVAILABLE_MODELS[model_key]
+    filepath = MODELS_DIR / model["filename"]
+    return filepath.exists()
+
+
+def get_model_path(model_key: str) -> Optional[Path]:
+    """Retourne le chemin local du modèle s'il est téléchargé."""
+    if model_key not in AVAILABLE_MODELS:
+        return None
+    model = AVAILABLE_MODELS[model_key]
+    filepath = MODELS_DIR / model["filename"]
+    if filepath.exists():
+        return filepath
+    return None
+
+
+def download_model(
+    model_key: str,
+    progress_callback: Optional[Callable] = None,
+) -> Path:
+    """
+    Télécharge un modèle depuis HuggingFace Hub.
+    
+    Args:
+        model_key: Clé du modèle dans AVAILABLE_MODELS.
+        progress_callback: Callback(progress, message) pour le suivi.
+    
+    Returns:
+        Path vers le fichier modèle téléchargé.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        raise ValueError(f"Modèle inconnu : {model_key}. Modèles disponibles : {list(AVAILABLE_MODELS.keys())}")
+
+    model = AVAILABLE_MODELS[model_key]
+    local_path = MODELS_DIR / model["filename"]
+
+    # Vérifier si déjà téléchargé
+    if local_path.exists():
+        if progress_callback:
+            progress_callback(1.0, f"Modèle {model['name']} déjà téléchargé.")
+        return local_path
+
+    if progress_callback:
+        progress_callback(0.0, f"Téléchargement de {model['name']} ({model['size_gb']} Go)...")
+
+    try:
+        from huggingface_hub import hf_hub_download
+
+        # Télécharger le fichier GGUF
+        downloaded_path = hf_hub_download(
+            repo_id=model["repo_id"],
+            filename=model["filename"],
+            local_dir=str(MODELS_DIR),
+            local_dir_use_symlinks=False,
+        )
+
+        if progress_callback:
+            progress_callback(1.0, f"Modèle {model['name']} téléchargé avec succès.")
+
+        return Path(downloaded_path)
+
+    except ImportError:
+        raise ImportError(
+            "huggingface_hub n'est pas installé. "
+            "Installez-le avec : pip install huggingface_hub"
+        )
+    except Exception as e:
+        raise RuntimeError(f"Erreur lors du téléchargement de {model['name']}: {e}")
+
+
+# =============================================================================
+# Détection du backend optimal
+# =============================================================================
+
+def detect_best_backend() -> Dict[str, Any]:
+    """
+    Détecte le meilleur backend disponible pour l'inférence.
+    Retourne des informations sur le backend sélectionné.
+    """
+    system = platform.system()
+    machine = platform.machine()
+
+    result = {
+        "backend": "cpu",
+        "n_gpu_layers": 0,
+        "details": "",
+    }
+
+    # Vérifier CUDA (Windows/Linux)
+    try:
+        import subprocess
+        nvidia_check = subprocess.run(
+            ["nvidia-smi"], capture_output=True, timeout=5
+        )
+        if nvidia_check.returncode == 0:
+            result["backend"] = "cuda"
+            result["n_gpu_layers"] = -1  # Toutes les couches sur GPU
+            result["details"] = "NVIDIA GPU détecté, utilisation de CUDA"
+            return result
+    except (FileNotFoundError, Exception):
+        pass
+
+    # Vérifier Metal (macOS)
+    if system == "Darwin":
+        if machine == "arm64":
+            result["backend"] = "metal"
+            result["n_gpu_layers"] = -1  # Toutes les couches sur GPU
+            result["details"] = "Apple Silicon détecté, utilisation de Metal"
+        else:
+            # Intel Mac - vérifier si Metal est supporté
+            result["backend"] = "metal"
+            result["n_gpu_layers"] = -1
+            result["details"] = "macOS détecté, tentative Metal"
+        return result
+
+    result["details"] = "Aucun accélérateur détecté, fallback CPU"
+    return result
+
+
+# =============================================================================
+# Inférence LLM avec llama-cpp-python
+# =============================================================================
+
+def _load_model(model_path: str, backend_info: Dict[str, Any], n_ctx: int = 2048):
+    """
+    Charge un modèle GGUF avec llama-cpp-python.
+    
+    Returns:
+        Instance Llama.
+    """
+    try:
+        from llama_cpp import Llama
+    except ImportError:
+        raise ImportError(
+            "llama-cpp-python n'est pas installé.\n"
+            "Installation :\n"
+            "  macOS (Metal) : CMAKE_ARGS=\"-DGGML_METAL=on\" pip install llama-cpp-python\n"
+            "  Windows (CUDA): CMAKE_ARGS=\"-DGGML_CUDA=on\" pip install llama-cpp-python\n"
+            "  CPU only      : pip install llama-cpp-python"
+        )
+
+    n_gpu_layers = backend_info.get("n_gpu_layers", 0)
+
+    model = Llama(
+        model_path=str(model_path),
+        n_ctx=n_ctx,
+        n_gpu_layers=n_gpu_layers,
+        seed=INFERENCE_CONFIG["seed"],
+        verbose=False,
+    )
+
+    return model
+
+
+def run_single_inference(
+    model,
+    prompt: str = BENCHMARK_PROMPT,
+    max_tokens: int = None,
+) -> Dict[str, Any]:
+    """
+    Exécute une inférence unique et mesure les métriques.
+    
+    Returns:
+        Dict avec latence premier token, tokens/s, mémoire, etc.
+    """
+    if max_tokens is None:
+        max_tokens = INFERENCE_CONFIG["max_tokens"]
+
+    # Mesurer la mémoire avant
+    process = psutil.Process()
+    mem_before = process.memory_info().rss / (1024**3)  # En Go
+
+    # Mesurer l'inférence avec streaming pour capturer le premier token
+    tokens_generated = 0
+    first_token_time = None
+    token_times = []
+    error = None
+
+    try:
+        start_time = time.perf_counter()
+
+        # Utiliser le mode streaming pour mesurer le premier token
+        stream = model.create_completion(
+            prompt,
+            max_tokens=max_tokens,
+            temperature=INFERENCE_CONFIG["temperature"],
+            top_p=INFERENCE_CONFIG["top_p"],
+            repeat_penalty=INFERENCE_CONFIG["repeat_penalty"],
+            stream=True,
+        )
+
+        generated_text = ""
+        for chunk in stream:
+            current_time = time.perf_counter()
+            token_text = chunk["choices"][0]["text"]
+
+            if token_text:  # Ignorer les tokens vides
+                tokens_generated += 1
+                token_times.append(current_time)
+
+                if first_token_time is None:
+                    first_token_time = current_time - start_time
+
+                generated_text += token_text
+
+        total_time = time.perf_counter() - start_time
+
+    except Exception as e:
+        error = str(e)
+        total_time = time.perf_counter() - start_time
+
+    # Mesurer la mémoire après
+    mem_after = process.memory_info().rss / (1024**3)
+
+    # Calculer les métriques
+    result = {
+        "tokens_generated": tokens_generated,
+        "total_time_s": round(total_time, 4),
+        "first_token_latency_s": round(first_token_time, 4) if first_token_time else None,
+        "tokens_per_second": round(tokens_generated / total_time, 2) if total_time > 0 else 0,
+        "memory_before_gb": round(mem_before, 3),
+        "memory_after_gb": round(mem_after, 3),
+        "memory_delta_gb": round(mem_after - mem_before, 3),
+        "error": error,
+        "success": error is None,
+    }
+
+    # Calculer la latence inter-tokens si possible
+    if len(token_times) > 1:
+        inter_token_latencies = [
+            token_times[i] - token_times[i-1]
+            for i in range(1, len(token_times))
+        ]
+        result["avg_inter_token_latency_ms"] = round(
+            np.mean(inter_token_latencies) * 1000, 2
+        )
+        result["p90_inter_token_latency_ms"] = round(
+            np.percentile(inter_token_latencies, 90) * 1000, 2
+        )
+
+    return result
+
+
+def benchmark_model(
+    model_key: str,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Exécute le benchmark complet pour un modèle donné.
+    Inclut le téléchargement, le chargement, l'échauffement et les runs de benchmark.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        return {"error": f"Modèle inconnu : {model_key}"}
+
+    model_config = AVAILABLE_MODELS[model_key]
+
+    # Nettoyage mémoire avant le benchmark
+    if progress_callback:
+        progress_callback(0.01, f"Nettoyage mémoire avant {model_config['name']}...")
+    cleanup_info = system_cleanup(f"LLM {model_config['name']}")
+
+    # Vérifier la RAM : on utilise la RAM totale du système (pas l'instantanée)
+    # car macOS gère dynamiquement les caches et libère la mémoire à la demande.
+    ram_total = psutil.virtual_memory().total / (1024**3)
+    if ram_total < model_config["min_ram_gb"]:
+        return {
+            "model": model_config["name"],
+            "status": "skipped",
+            "reason": f"RAM totale insuffisante ({ram_total:.1f} Go total, "
+                      f"{model_config['min_ram_gb']} Go requis)",
+        }
+
+    result = {
+        "model": model_config["name"],
+        "params": model_config["params"],
+        "status": "running",
+        "runs": [],
+    }
+
+    try:
+        # Étape 1: Téléchargement
+        if progress_callback:
+            progress_callback(0.05, f"Vérification du modèle {model_config['name']}...")
+
+        model_path = download_model(model_key, progress_callback=None)
+
+        # Étape 2: Détection du backend
+        backend_info = detect_best_backend()
+        result["backend"] = backend_info
+
+        if progress_callback:
+            progress_callback(0.10, f"Chargement de {model_config['name']} ({backend_info['backend']})...")
+
+        # Étape 3: Chargement du modèle
+        load_start = time.perf_counter()
+        model = _load_model(
+            model_path,
+            backend_info,
+            n_ctx=INFERENCE_CONFIG["n_ctx"],
+        )
+        load_time = time.perf_counter() - load_start
+        result["model_load_time_s"] = round(load_time, 2)
+
+        # Étape 4: Échauffement
+        if progress_callback:
+            progress_callback(0.20, f"Échauffement {model_config['name']}...")
+
+        for _ in range(INFERENCE_CONFIG["n_warmup_runs"]):
+            run_single_inference(model, max_tokens=32)
+
+        # Étape 5: Exécution des benchmarks
+        n_runs = INFERENCE_CONFIG["n_benchmark_runs"]
+        monitor = ResourceMonitor()
+        monitor.start()
+
+        for i in range(n_runs):
+            if progress_callback:
+                p = 0.30 + (i / n_runs) * 0.65
+                progress_callback(p, f"Inférence {model_config['name']} - Run {i+1}/{n_runs}")
+
+            run_result = run_single_inference(model)
+            result["runs"].append(run_result)
+
+        resource_usage = monitor.stop()
+        result["resource_usage"] = resource_usage
+
+        # Étape 6: Calcul des statistiques agrégées
+        successful_runs = [r for r in result["runs"] if r["success"]]
+        if successful_runs:
+            result["summary"] = {
+                "n_successful_runs": len(successful_runs),
+                "n_total_runs": n_runs,
+                "avg_tokens_per_second": round(
+                    np.mean([r["tokens_per_second"] for r in successful_runs]), 2
+                ),
+                "std_tokens_per_second": round(
+                    np.std([r["tokens_per_second"] for r in successful_runs]), 2
+                ),
+                "avg_first_token_latency_s": round(
+                    np.mean([r["first_token_latency_s"] for r in successful_runs
+                            if r["first_token_latency_s"] is not None]), 4
+                ),
+                "avg_total_time_s": round(
+                    np.mean([r["total_time_s"] for r in successful_runs]), 4
+                ),
+                "peak_memory_gb": round(
+                    max(r["memory_after_gb"] for r in successful_runs), 3
+                ),
+                "stability": "stable" if len(successful_runs) == n_runs else "unstable",
+            }
+
+        result["status"] = "completed"
+
+        # Nettoyage
+        del model
+        gc.collect()
+
+        if progress_callback:
+            progress_callback(1.0, f"Benchmark {model_config['name']} terminé.")
+
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+        if progress_callback:
+            progress_callback(1.0, f"Erreur : {e}")
+
+    return result
+
+
+# =============================================================================
+# Orchestrateur des benchmarks IA
+# =============================================================================
+
+def run_all_ai_benchmarks(
+    model_keys: List[str] = None,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Exécute les benchmarks IA pour tous les modèles sélectionnés.
+    
+    Args:
+        model_keys: Liste des clés de modèles à tester. Si None, teste tous les modèles compatibles.
+        progress_callback: Callback(progress, message) pour le suivi.
+    
+    Returns:
+        Dict contenant tous les résultats de benchmark IA.
+    """
+    # Déterminer les modèles à tester
+    if model_keys is None:
+        ram_total = psutil.virtual_memory().total / (1024**3)
+        compatible = get_compatible_models(ram_total)
+        model_keys = list(compatible.keys())
+
+    if not model_keys:
+        return {
+            "type": "ai_benchmarks",
+            "status": "skipped",
+            "reason": "Aucun modèle compatible avec la RAM disponible.",
+        }
+
+    all_results = {}
+    start_time = time.time()
+    n_models = len(model_keys)
+
+    for idx, model_key in enumerate(model_keys):
+        def model_progress(p, msg, _idx=idx):
+            if progress_callback:
+                overall = (_idx + p) / n_models
+                progress_callback(overall, msg)
+
+        if progress_callback:
+            progress_callback(idx / n_models, f"Modèle {idx+1}/{n_models}: {AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)}")
+
+        # Nettoyage inter-modèles (libérer la mémoire du modèle précédent)
+        if idx > 0:
+            system_cleanup(f"entre modèles ({idx+1}/{n_models})")
+
+        all_results[model_key] = benchmark_model(
+            model_key,
+            progress_callback=model_progress,
+        )
+
+    elapsed_total = time.time() - start_time
+
+    return {
+        "type": "ai_benchmarks",
+        "prompt": BENCHMARK_PROMPT,
+        "inference_config": INFERENCE_CONFIG,
+        "total_time_s": round(elapsed_total, 2),
+        "models_tested": len(model_keys),
+        "results": all_results,
+    }
+
+
+if __name__ == "__main__":
+    def print_progress(p, msg):
+        bar = "█" * int(p * 30) + "░" * (30 - int(p * 30))
+        print(f"\r  [{bar}] {p*100:.0f}% - {msg}", end="", flush=True)
+
+    print("Lancement des benchmarks IA...\n")
+    # Tester uniquement le plus petit modèle
+    results = run_all_ai_benchmarks(
+        model_keys=["tinyllama-1.1b"],
+        progress_callback=print_progress
+    )
+    print("\n\nTerminé !")
+    
+    import json
+    print(json.dumps(results, indent=2, default=str))

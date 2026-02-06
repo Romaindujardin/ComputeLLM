@@ -1,0 +1,21 @@
+# =============================================================================
+# ComputeLLM - Dependencies
+# =============================================================================
+
+# Core
+numpy>=1.24.0
+psutil>=5.9.0
+
+# Model download
+huggingface_hub>=0.20.0
+
+# LLM inference (install with correct backend - see README)
+# llama-cpp-python>=0.2.0
+
+# GUI
+streamlit>=1.30.0
+plotly>=5.18.0
+pandas>=2.0.0
+
+# Optional: GPU benchmarks
+# torch>=2.0.0
