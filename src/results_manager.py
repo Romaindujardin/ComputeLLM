@@ -179,6 +179,18 @@ def list_results() -> List[Dict[str, Any]]:
                 meta["best_tokens_per_second"] = best_tps
                 meta["best_model"] = best_model
 
+            # Résumé quantification
+            quant_comp = data.get("ai_benchmarks", {}).get("quantization_comparison", {})
+            if quant_comp:
+                meta["has_quantization_comparison"] = True
+                quant_models = []
+                for mk, comp_data in quant_comp.items():
+                    n_variants = len(comp_data.get("comparison_table", []))
+                    quant_models.append(f"{comp_data.get('model_name', mk)} ({n_variants} quants)")
+                meta["quantization_models"] = ", ".join(quant_models)
+            else:
+                meta["has_quantization_comparison"] = False
+
             results.append(meta)
         except Exception:
             continue
@@ -326,6 +338,59 @@ def export_to_csv(result_file: str, output_path: str = None) -> Path:
                 "value": summary.get("avg_first_token_latency_s", 0),
                 "mean_time_s": 0,
             })
+
+    # Benchmarks de comparaison de quantification
+    quant_comp = data.get("ai_benchmarks", {}).get("quantization_comparison", {})
+    for model_key, comp_data in quant_comp.items():
+        model_name = comp_data.get("model_name", model_key)
+        for qk, qr in comp_data.get("results", {}).items():
+            summary = qr.get("summary", {})
+            if summary:
+                rows.append({
+                    "machine": machine_name,
+                    "benchmark_type": "quantization_comparison",
+                    "test": f"{model_name} {qk}",
+                    "sub_test": "tokens_per_second",
+                    "metric": "tokens/s",
+                    "value": summary.get("avg_tokens_per_second", 0),
+                    "mean_time_s": summary.get("avg_total_time_s", 0),
+                })
+                rows.append({
+                    "machine": machine_name,
+                    "benchmark_type": "quantization_comparison",
+                    "test": f"{model_name} {qk}",
+                    "sub_test": "first_token_latency",
+                    "metric": "seconds",
+                    "value": summary.get("avg_first_token_latency_s", 0),
+                    "mean_time_s": 0,
+                })
+                rows.append({
+                    "machine": machine_name,
+                    "benchmark_type": "quantization_comparison",
+                    "test": f"{model_name} {qk}",
+                    "sub_test": "peak_memory",
+                    "metric": "gb",
+                    "value": summary.get("peak_memory_gb", 0),
+                    "mean_time_s": 0,
+                })
+                rows.append({
+                    "machine": machine_name,
+                    "benchmark_type": "quantization_comparison",
+                    "test": f"{model_name} {qk}",
+                    "sub_test": "model_load_time",
+                    "metric": "seconds",
+                    "value": qr.get("model_load_time_s", 0),
+                    "mean_time_s": 0,
+                })
+                rows.append({
+                    "machine": machine_name,
+                    "benchmark_type": "quantization_comparison",
+                    "test": f"{model_name} {qk}",
+                    "sub_test": "file_size",
+                    "metric": "gb",
+                    "value": qr.get("actual_file_size_gb", qr.get("file_size_gb", 0)),
+                    "mean_time_s": 0,
+                })
 
     # Écrire le CSV
     if rows:

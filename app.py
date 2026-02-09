@@ -26,6 +26,10 @@ from src.benchmark_ai import (
     is_model_downloaded,
     download_model,
     detect_best_backend,
+    get_available_quantizations,
+    get_compatible_quantizations,
+    is_quantization_downloaded,
+    download_quantization,
 )
 from src.results_manager import (
     save_results,
@@ -34,7 +38,7 @@ from src.results_manager import (
     compare_results,
     export_to_csv,
 )
-from src.config import AVAILABLE_MODELS, RESULTS_DIR
+from src.config import AVAILABLE_MODELS, QUANTIZATION_VARIANTS, RESULTS_DIR
 
 # =============================================================================
 # Configuration de la page Streamlit
@@ -104,6 +108,8 @@ if "ai_results" not in st.session_state:
     st.session_state.ai_results = None
 if "last_save_path" not in st.session_state:
     st.session_state.last_save_path = None
+if "quant_results" not in st.session_state:
+    st.session_state.quant_results = None
 
 
 # =============================================================================
@@ -305,17 +311,73 @@ def page_benchmark():
         if not compatible:
             st.warning("Aucun modèle compatible avec votre RAM.")
 
+    # ─── Comparaison de quantification ───
+    st.markdown("---")
+    st.markdown("### Comparaison de quantification")
+    st.caption(
+        "Comparez les performances de différentes quantifications (Q2, Q3, Q4, Q5, Q6, Q8) "
+        "d'un même modèle. Mesure l'impact sur les tokens/s, la latence, la mémoire et "
+        "le temps de chargement."
+    )
+
+    quant_selections = {}  # model_key → [quant_key, ...]
+    models_with_quants = {
+        k: v for k, v in QUANTIZATION_VARIANTS.items()
+        if k in compatible
+    }
+
+    if models_with_quants:
+        for model_key, variants in models_with_quants.items():
+            model_name = AVAILABLE_MODELS[model_key]["name"]
+            params = AVAILABLE_MODELS[model_key]["params"]
+
+            with st.expander(f"🔧 {model_name} ({params})", expanded=(model_key == "tinyllama-1.1b")):
+                enable_quant = st.checkbox(
+                    f"Activer la comparaison de quantification pour {model_name}",
+                    value=False,
+                    key=f"quant_enable_{model_key}",
+                )
+
+                if enable_quant:
+                    compatible_quants = get_compatible_quantizations(model_key, ram_total)
+                    selected_quants = []
+
+                    q_cols = st.columns(min(len(compatible_quants), 6))
+                    for i, (qk, qv) in enumerate(compatible_quants.items()):
+                        col_idx = i % len(q_cols)
+                        downloaded = is_quantization_downloaded(model_key, qk)
+                        dl_str = "✅" if downloaded else "📥"
+                        with q_cols[col_idx]:
+                            if st.checkbox(
+                                f"{dl_str} {qk} ({qv['size_gb']} Go)",
+                                value=downloaded,
+                                key=f"quant_{model_key}_{qk}",
+                                help=qv["description"],
+                            ):
+                                selected_quants.append(qk)
+
+                    if selected_quants:
+                        quant_selections[model_key] = selected_quants
+                        st.info(f"{len(selected_quants)} quantification(s) sélectionnée(s) : {', '.join(selected_quants)}")
+
+    else:
+        st.info("Aucun modèle compatible pour la comparaison de quantification.")
+
     st.markdown("---")
 
     # Résumé de la configuration
     backend_info = detect_best_backend()
     st.markdown("### Résumé")
-    cols = st.columns(4)
+
+    n_quant_tests = sum(len(qs) for qs in quant_selections.values())
+    n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests
+
+    cols = st.columns(5)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
     cols[1].metric("Modèles sélectionnés", len(selected_models))
-    cols[2].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
-    n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models)
-    cols[3].metric("Tests à exécuter", n_tests)
+    cols[2].metric("Tests quantification", n_quant_tests)
+    cols[3].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
+    cols[4].metric("Tests total", n_tests)
 
     st.markdown("---")
 
@@ -333,6 +395,7 @@ def page_benchmark():
         st.session_state.benchmark_running = True
         st.session_state.classic_results = None
         st.session_state.ai_results = None
+        st.session_state.quant_results = None
 
         total_start = time.time()
 
@@ -368,9 +431,11 @@ def page_benchmark():
             st.info("Benchmarks classiques désactivés.")
 
         # ============================
-        # BENCHMARKS IA
+        # BENCHMARKS IA (modèles + quantification)
         # ============================
-        if selected_models:
+        has_ai_work = bool(selected_models) or bool(quant_selections)
+
+        if has_ai_work:
             st.markdown("### Benchmarks IA (Inférence LLM)")
             ai_progress = st.progress(0.0)
             ai_status = st.status("Benchmarks IA en cours...", expanded=True)
@@ -380,7 +445,7 @@ def page_benchmark():
                 ai_status.update(label=msg)
 
             with ai_status:
-                # Téléchargement des modèles si nécessaire
+                # Téléchargement des modèles de base si nécessaire
                 for model_key in selected_models:
                     if not is_model_downloaded(model_key):
                         model_info = AVAILABLE_MODELS[model_key]
@@ -391,11 +456,24 @@ def page_benchmark():
                         except Exception as e:
                             st.error(f"Erreur téléchargement {model_info['name']}: {e}")
 
-                # Exécution des benchmarks
+                # Téléchargement des quantifications si nécessaire
+                for model_key, quant_keys in quant_selections.items():
+                    model_info = AVAILABLE_MODELS[model_key]
+                    for qk in quant_keys:
+                        if not is_quantization_downloaded(model_key, qk):
+                            st.write(f"Téléchargement de {model_info['name']} {qk}...")
+                            try:
+                                download_quantization(model_key, qk)
+                                st.write(f"✅ {model_info['name']} {qk} téléchargé.")
+                            except Exception as e:
+                                st.error(f"Erreur téléchargement {model_info['name']} {qk}: {e}")
+
+                # Exécution des benchmarks (modèles + quantification intégrés)
                 st.write("Exécution des inférences...")
                 try:
                     ai_results = run_all_ai_benchmarks(
-                        model_keys=selected_models,
+                        model_keys=selected_models if selected_models else [],
+                        quantization_models=quant_selections if quant_selections else None,
                         progress_callback=ai_callback,
                     )
                     st.session_state.ai_results = ai_results
@@ -409,7 +487,7 @@ def page_benchmark():
 
             ai_progress.progress(1.0)
         else:
-            st.info("Aucun modèle IA sélectionné.")
+            st.info("Aucun modèle IA ni comparaison de quantification sélectionné.")
 
         # ============================
         # SAUVEGARDE AUTOMATIQUE
@@ -493,6 +571,24 @@ def page_benchmark():
                             "Ignoré",
                             data.get("reason", "")
                         )
+
+            # Résumé rapide de la comparaison de quantification
+            quant_comp = st.session_state.ai_results.get("quantization_comparison", {})
+            if quant_comp:
+                st.markdown("#### Aperçu comparaison quantification")
+                for model_key, comp_data in quant_comp.items():
+                    model_name = comp_data.get("model_name", model_key)
+                    table = comp_data.get("comparison_table", [])
+                    if table:
+                        n_q = len(table)
+                        cols = st.columns(n_q)
+                        for i, row in enumerate(table):
+                            tps = row.get("tokens_per_second", 0)
+                            cols[i].metric(
+                                f"{model_name} {row['quantization']}",
+                                f"{tps} tok/s",
+                                f"{row.get('file_size_gb', 0):.2f} Go",
+                            )
 
         st.info("Consultez la page **Résultats** pour une analyse détaillée.")
 
@@ -772,6 +868,167 @@ def _display_single_result(data: dict, filename: str):
             )
             fig.update_layout(showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
+
+    # === Comparaison de Quantification ===
+    quant_comp = ai.get("quantization_comparison", {})
+    if quant_comp:
+        st.markdown("---")
+        st.markdown("### Comparaison de Quantification")
+
+        import plotly.graph_objects as go
+
+        for model_key, comp_data in quant_comp.items():
+            model_name = comp_data.get("model_name", model_key)
+            params = comp_data.get("params", "")
+            table = comp_data.get("comparison_table", [])
+            qresults = comp_data.get("results", {})
+
+            if not table:
+                st.warning(f"Aucun résultat de quantification pour {model_name}.")
+                continue
+
+            st.markdown(f"#### {model_name} ({params})")
+
+            # Tableau comparatif
+            qt_data = {
+                "Quantification": [],
+                "Bits": [],
+                "Taille fichier (Go)": [],
+                "Tokens/s": [],
+                "1er token (s)": [],
+                "Latence inter-token (ms)": [],
+                "Mémoire pic (Go)": [],
+                "Chargement (s)": [],
+                "Stabilité": [],
+            }
+            for row in table:
+                qt_data["Quantification"].append(row["quantization"])
+                qt_data["Bits"].append(row["bits"])
+                qt_data["Taille fichier (Go)"].append(round(row.get("file_size_gb") or 0, 3))
+                qt_data["Tokens/s"].append(row.get("tokens_per_second") or 0)
+                qt_data["1er token (s)"].append(row.get("first_token_latency_s") or 0)
+                qt_data["Latence inter-token (ms)"].append(row.get("inter_token_latency_ms") or 0)
+                qt_data["Mémoire pic (Go)"].append(row.get("peak_memory_gb") or 0)
+                qt_data["Chargement (s)"].append(row.get("model_load_time_s") or 0)
+                qt_data["Stabilité"].append(row.get("stability") or "?")
+
+            import pandas as pd
+            df_qt = pd.DataFrame(qt_data)
+            st.dataframe(df_qt, use_container_width=True, hide_index=True)
+
+            # Graphiques comparatifs
+            quant_labels = [row["quantization"] for row in table]
+            quant_bits = [f'{row["bits"]}-bit' for row in table]
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Tokens/s par quantification
+                tps_vals = [row.get("tokens_per_second") or 0 for row in table]
+                fig_tps = px.bar(
+                    x=quant_labels, y=tps_vals,
+                    labels={"x": "Quantification", "y": "Tokens/s"},
+                    title=f"{model_name} — Débit d'inférence par quantification",
+                    color=quant_labels,
+                    color_discrete_sequence=px.colors.qualitative.Vivid,
+                    text=tps_vals,
+                )
+                fig_tps.update_traces(texttemplate="%{text:.1f}", textposition="outside")
+                fig_tps.update_layout(showlegend=False, xaxis_title="Quantification", yaxis_title="Tokens/s")
+                st.plotly_chart(fig_tps, use_container_width=True)
+
+            with col2:
+                # Mémoire pic par quantification
+                mem_vals = [row.get("peak_memory_gb") or 0 for row in table]
+                fig_mem = px.bar(
+                    x=quant_labels, y=mem_vals,
+                    labels={"x": "Quantification", "y": "Mémoire pic (Go)"},
+                    title=f"{model_name} — Mémoire pic par quantification",
+                    color=quant_labels,
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                    text=[f"{v:.2f}" for v in mem_vals],
+                )
+                fig_mem.update_traces(textposition="outside")
+                fig_mem.update_layout(showlegend=False, xaxis_title="Quantification", yaxis_title="Go")
+                st.plotly_chart(fig_mem, use_container_width=True)
+
+            col3, col4 = st.columns(2)
+
+            with col3:
+                # Latence premier token
+                ftl_vals = [row.get("first_token_latency_s") or 0 for row in table]
+                fig_ftl = px.bar(
+                    x=quant_labels, y=ftl_vals,
+                    labels={"x": "Quantification", "y": "Latence (s)"},
+                    title=f"{model_name} — Latence du 1er token",
+                    color=quant_labels,
+                    color_discrete_sequence=px.colors.qualitative.Pastel,
+                    text=[f"{v:.3f}" for v in ftl_vals],
+                )
+                fig_ftl.update_traces(textposition="outside")
+                fig_ftl.update_layout(showlegend=False, xaxis_title="Quantification", yaxis_title="Secondes")
+                st.plotly_chart(fig_ftl, use_container_width=True)
+
+            with col4:
+                # Temps de chargement
+                load_vals = [row.get("model_load_time_s") or 0 for row in table]
+                fig_load = px.bar(
+                    x=quant_labels, y=load_vals,
+                    labels={"x": "Quantification", "y": "Temps (s)"},
+                    title=f"{model_name} — Temps de chargement du modèle",
+                    color=quant_labels,
+                    color_discrete_sequence=px.colors.qualitative.Bold,
+                    text=[f"{v:.1f}" for v in load_vals],
+                )
+                fig_load.update_traces(textposition="outside")
+                fig_load.update_layout(showlegend=False, xaxis_title="Quantification", yaxis_title="Secondes")
+                st.plotly_chart(fig_load, use_container_width=True)
+
+            # Graphique combiné : taille fichier vs tokens/s (scatter)
+            size_vals = [row.get("file_size_gb") or 0 for row in table]
+            tps_vals = [row.get("tokens_per_second") or 0 for row in table]
+            fig_scatter = go.Figure()
+            fig_scatter.add_trace(go.Scatter(
+                x=size_vals,
+                y=tps_vals,
+                mode="markers+text",
+                marker=dict(
+                    size=[b * 5 + 10 for b in [row["bits"] for row in table]],
+                    color=[row["bits"] for row in table],
+                    colorscale="Viridis",
+                    showscale=True,
+                    colorbar=dict(title="Bits"),
+                ),
+                text=quant_labels,
+                textposition="top center",
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Taille : %{x:.2f} Go<br>"
+                    "Tokens/s : %{y:.1f}<br>"
+                    "<extra></extra>"
+                ),
+            ))
+            fig_scatter.update_layout(
+                title=f"{model_name} — Compromis taille fichier vs performance",
+                xaxis_title="Taille du fichier (Go)",
+                yaxis_title="Tokens/s",
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
+            # Latence inter-token si disponible
+            itl_vals = [row.get("inter_token_latency_ms") or 0 for row in table]
+            if any(v > 0 for v in itl_vals):
+                fig_itl = px.bar(
+                    x=quant_labels, y=itl_vals,
+                    labels={"x": "Quantification", "y": "Latence (ms)"},
+                    title=f"{model_name} — Latence inter-token moyenne",
+                    color=quant_labels,
+                    color_discrete_sequence=px.colors.qualitative.Set3,
+                    text=[f"{v:.1f}" for v in itl_vals],
+                )
+                fig_itl.update_traces(textposition="outside")
+                fig_itl.update_layout(showlegend=False)
+                st.plotly_chart(fig_itl, use_container_width=True)
 
     # JSON brut
     with st.expander("Données brutes (JSON)"):
@@ -1059,6 +1316,132 @@ def _display_comparison(loaded_data: dict):
             )
     else:
         st.info("Aucun résultat d'inférence IA à comparer.")
+
+    # ══════════════════════════════════════════════
+    # Comparaison Quantification inter-machines
+    # ══════════════════════════════════════════════
+    all_quant_models = {}
+    for fname, data in loaded_data.items():
+        quant_comp = data.get("ai_benchmarks", {}).get("quantization_comparison", {})
+        for model_key, comp_data in quant_comp.items():
+            if model_key not in all_quant_models:
+                all_quant_models[model_key] = comp_data.get("model_name", model_key)
+
+    if all_quant_models:
+        st.markdown("#### Comparaison Quantification")
+
+        for model_key, model_name in all_quant_models.items():
+            st.markdown(f"##### {model_name}")
+
+            # Collecter toutes les quantifications testées
+            all_quants = set()
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "quantization_comparison", {}
+                ).get(model_key, {})
+                for qk, qr in comp.get("results", {}).items():
+                    if qr.get("summary"):
+                        all_quants.add(qk)
+
+            if not all_quants:
+                continue
+
+            quant_sorted = sorted(all_quants, key=lambda q: QUANTIZATION_VARIANTS.get(
+                model_key, {}
+            ).get(q, {}).get("bits", 0))
+
+            # Tokens/s par quantification, par machine
+            fig_q_tps = go.Figure()
+            fig_q_mem = go.Figure()
+
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "quantization_comparison", {}
+                ).get(model_key, {})
+                results = comp.get("results", {})
+
+                tps_vals = []
+                mem_vals = []
+                for qk in quant_sorted:
+                    qr = results.get(qk, {})
+                    summary = qr.get("summary", {})
+                    tps_vals.append(summary.get("avg_tokens_per_second", 0))
+                    mem_vals.append(summary.get("peak_memory_gb", 0))
+
+                fig_q_tps.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=quant_sorted,
+                    y=tps_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in tps_vals],
+                    textposition="outside",
+                ))
+                fig_q_mem.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=quant_sorted,
+                    y=mem_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.2f}" if v > 0 else "" for v in mem_vals],
+                    textposition="outside",
+                ))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_q_tps.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Tokens/s par quantification",
+                    yaxis_title="Tokens/s",
+                    xaxis_title="Quantification",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_q_tps, use_container_width=True)
+            with col2:
+                fig_q_mem.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Mémoire pic par quantification",
+                    yaxis_title="Go",
+                    xaxis_title="Quantification",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_q_mem, use_container_width=True)
+
+            # Tableau comparatif quantification multi-machine
+            qt_table = {
+                "Résultat": [], "Quantification": [], "Bits": [],
+                "Taille (Go)": [], "Tokens/s": [],
+                "1er token (s)": [], "Mémoire pic (Go)": [],
+                "Chargement (s)": [],
+            }
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "quantization_comparison", {}
+                ).get(model_key, {})
+                results = comp.get("results", {})
+                for qk in quant_sorted:
+                    qr = results.get(qk, {})
+                    summary = qr.get("summary", {})
+                    if summary:
+                        qt_table["Résultat"].append(result_labels[fname])
+                        qt_table["Quantification"].append(qk)
+                        qt_table["Bits"].append(qr.get("bits", 0))
+                        qt_table["Taille (Go)"].append(
+                            round(qr.get("actual_file_size_gb", qr.get("file_size_gb", 0)), 3)
+                        )
+                        qt_table["Tokens/s"].append(summary.get("avg_tokens_per_second", 0))
+                        qt_table["1er token (s)"].append(
+                            summary.get("avg_first_token_latency_s", 0)
+                        )
+                        qt_table["Mémoire pic (Go)"].append(
+                            summary.get("peak_memory_gb", 0)
+                        )
+                        qt_table["Chargement (s)"].append(
+                            qr.get("model_load_time_s", 0)
+                        )
+
+            if qt_table["Résultat"]:
+                st.dataframe(
+                    pd.DataFrame(qt_table), use_container_width=True, hide_index=True
+                )
 
 
 # =============================================================================
