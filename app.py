@@ -518,11 +518,16 @@ def page_results():
         r["filename"]: r for r in saved_results
     }
 
-    selected_files = st.multiselect(
-        "Sélectionnez un ou plusieurs résultats à afficher/comparer :",
-        options=list(result_options.keys()),
-        default=[list(result_options.keys())[0]],
-    )
+    # Afficher chaque résultat avec une checkbox
+    selected_files = []
+    for fname, meta in result_options.items():
+        cpu = meta.get("cpu", "Unknown")
+        timestamp = meta.get("timestamp", "")[:16].replace("T", " ")
+        ram = meta.get("ram_gb", 0)
+        backend = meta.get("backend", "cpu").upper()
+        label = f"**{fname}** — {cpu} | {ram} Go RAM | {backend} | {timestamp}"
+        if st.checkbox(label, value=False, key=f"cb_{fname}"):
+            selected_files.append(fname)
 
     if not selected_files:
         st.warning("Sélectionnez au moins un résultat.")

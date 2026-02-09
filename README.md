@@ -258,16 +258,6 @@ Modifiez `src/config.py` pour ajuster :
 
 ---
 
-## Contribuer
-
-1. Fork le dépôt
-2. Créer une branche : `git checkout -b feature/ma-feature`
-3. Commit : `git commit -am "Ajout de ma feature"`
-4. Push : `git push origin feature/ma-feature`
-5. Ouvrir une Pull Request
-
----
-
 ## Notes importantes
 
 - Les modèles GGUF sont téléchargés dans le dossier `models/` (plusieurs Go par modèle).
