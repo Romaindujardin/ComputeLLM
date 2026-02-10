@@ -99,7 +99,7 @@ CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python
 #### Windows / Linux (NVIDIA GPU — CUDA)
 
 ```bash
-CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
+set CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 ```
 
 #### CPU uniquement (fallback)
