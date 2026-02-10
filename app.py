@@ -92,6 +92,16 @@ st.markdown("""
         display: block;
         margin: 2rem auto;
     }
+    /* Boutons supprimer compacts */
+    [data-testid="stButton"] button[kind="secondary"] {
+        min-height: 0;
+    }
+    [data-testid="column"]:last-child [data-testid="stButton"] button {
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        line-height: 1;
+        min-height: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -275,7 +285,7 @@ def page_hardware():
 
                     if q_downloaded:
                         q_cols[4].write("Installé")
-                        if q_cols[5].button("🗑️", key=f"del_{key}_{qk}", help=f"Supprimer {model['name']} {qk}"):
+                        if q_cols[5].button("✕", key=f"del_{key}_{qk}", help=f"Supprimer {model['name']} {qk}"):
                             delete_quantization(key, qk)
                             st.rerun()
                     else:
@@ -638,7 +648,7 @@ def page_results():
         r["filename"]: r for r in saved_results
     }
 
-    # Afficher chaque résultat avec une checkbox
+    # Afficher chaque résultat avec une checkbox et un bouton supprimer
     selected_files = []
     for fname, meta in result_options.items():
         cpu = meta.get("cpu", "Unknown")
@@ -646,8 +656,18 @@ def page_results():
         ram = meta.get("ram_gb", 0)
         backend = meta.get("backend", "cpu").upper()
         label = f"**{fname}** — {cpu} | {ram} Go RAM | {backend} | {timestamp}"
-        if st.checkbox(label, value=False, key=f"cb_{fname}"):
-            selected_files.append(fname)
+
+        col_cb, col_del = st.columns([20, 1])
+        with col_cb:
+            if st.checkbox(label, value=False, key=f"cb_{fname}"):
+                selected_files.append(fname)
+        with col_del:
+            if st.button("✕", key=f"del_result_{fname}", help=f"Supprimer {fname}"):
+                try:
+                    os.remove(meta["filepath"])
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erreur suppression : {e}")
 
     if not selected_files:
         st.warning("Sélectionnez au moins un résultat.")
