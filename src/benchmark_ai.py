@@ -318,6 +318,8 @@ def run_single_inference(
 ) -> Dict[str, Any]:
     """
     Exécute une inférence unique et mesure les métriques.
+    Utilise le format chat (create_chat_completion) pour une meilleure
+    compatibilité avec toutes les quantifications des modèles instruct/chat.
     
     Returns:
         Dict avec latence premier token, tokens/s, mémoire, etc.
@@ -338,9 +340,13 @@ def run_single_inference(
     try:
         start_time = time.perf_counter()
 
-        # Utiliser le mode streaming pour mesurer le premier token
-        stream = model.create_completion(
-            prompt,
+        # Utiliser create_chat_completion (format chat) pour compatibilité
+        # avec toutes les quantifications des modèles instruct/chat.
+        stream = model.create_chat_completion(
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt},
+            ],
             max_tokens=max_tokens,
             temperature=INFERENCE_CONFIG["temperature"],
             top_p=INFERENCE_CONFIG["top_p"],
@@ -351,7 +357,8 @@ def run_single_inference(
         generated_text = ""
         for chunk in stream:
             current_time = time.perf_counter()
-            token_text = chunk["choices"][0]["text"]
+            delta = chunk["choices"][0].get("delta", {})
+            token_text = delta.get("content", "")
 
             if token_text:  # Ignorer les tokens vides
                 tokens_generated += 1
@@ -368,6 +375,10 @@ def run_single_inference(
         error = str(e)
         total_time = time.perf_counter() - start_time
 
+    # Marquer comme échoué si aucun token n'a été généré
+    if tokens_generated == 0 and error is None:
+        error = "Aucun token généré (le modèle a retourné un EOS immédiat)"
+
     # Mesurer la mémoire après
     mem_after = process.memory_info().rss / (1024**3)
 
@@ -376,7 +387,7 @@ def run_single_inference(
         "tokens_generated": tokens_generated,
         "total_time_s": round(total_time, 4),
         "first_token_latency_s": round(first_token_time, 4) if first_token_time else None,
-        "tokens_per_second": round(tokens_generated / total_time, 2) if total_time > 0 else 0,
+        "tokens_per_second": round(tokens_generated / total_time, 2) if total_time > 0 and tokens_generated > 0 else 0,
         "memory_before_gb": round(mem_before, 3),
         "memory_after_gb": round(mem_after, 3),
         "memory_delta_gb": round(mem_after - mem_before, 3),
