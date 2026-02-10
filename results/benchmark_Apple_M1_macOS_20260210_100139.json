@@ -1,0 +1,886 @@
+{
+  "id": "20260210_100139",
+  "timestamp": "2026-02-10T10:01:39.993019",
+  "version": "1.0.0",
+  "hardware": {
+    "os": {
+      "system": "Darwin",
+      "release": "25.2.0",
+      "version": "Darwin Kernel Version 25.2.0: Tue Nov 18 21:09:55 PST 2025; root:xnu-12377.61.12~1/RELEASE_ARM64_T8103",
+      "machine": "arm64",
+      "architecture": "64bit",
+      "platform": "macOS-26.2-arm64-arm-64bit",
+      "python_version": "3.11.9"
+    },
+    "cpu": {
+      "physical_cores": 8,
+      "logical_cores": 8,
+      "architecture": "arm64",
+      "model": "Apple M1",
+      "is_apple_silicon": true,
+      "architecture_type": "ARM (Apple Silicon)",
+      "performance_cores": 4,
+      "efficiency_cores": 4,
+      "frequency_mhz": {
+        "current": 3204,
+        "min": 600,
+        "max": 3204
+      }
+    },
+    "gpu": {
+      "gpus": [
+        {
+          "type": "Apple",
+          "name": "Apple M1",
+          "backend": "metal",
+          "metal_support": "",
+          "unified_memory": true,
+          "unified_memory_gb": 8.0
+        }
+      ],
+      "backends": [
+        "metal",
+        "cpu"
+      ],
+      "primary_backend": "metal",
+      "python_backends": {
+        "pytorch": true,
+        "pytorch_version": "2.10.0",
+        "pytorch_cuda": false,
+        "pytorch_mps": true,
+        "llama_cpp": true,
+        "llama_cpp_version": "0.3.16"
+      }
+    },
+    "ram": {
+      "total_gb": 8.0,
+      "available_gb": 1.27,
+      "used_gb": 2.97,
+      "percent_used": 84.1,
+      "swap_total_gb": 6.0,
+      "swap_used_gb": 4.74,
+      "unified_memory": true,
+      "note": "Apple Silicon utilise une mémoire unifiée partagée entre CPU et GPU.",
+      "hw_memsize_bytes": 8589934592
+    }
+  },
+  "classic_benchmarks": {
+    "type": "classic_benchmarks",
+    "total_time_s": 12.8,
+    "benchmarks": {
+      "cpu_single_thread": {
+        "test": "CPU Single-Thread",
+        "method": "Matrix multiplication (NumPy, 1 thread)",
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.0076,
+              0.0005,
+              0.0004
+            ],
+            "mean_s": 0.0028,
+            "std_s": 0.0034,
+            "gflops": 94.33
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0037,
+              0.0038,
+              0.0036
+            ],
+            "mean_s": 0.0037,
+            "std_s": 0.0001,
+            "gflops": 576.37
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0307,
+              0.0199,
+              0.0205
+            ],
+            "mean_s": 0.0237,
+            "std_s": 0.0049,
+            "gflops": 723.93
+          }
+        }
+      },
+      "cpu_multi_thread": {
+        "test": "CPU Multi-Thread",
+        "method": "Matrix multiplication (NumPy, 8 threads)",
+        "n_threads": 8,
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.0009,
+              0.0007,
+              0.0009
+            ],
+            "mean_s": 0.0008,
+            "std_s": 0.0001,
+            "gflops": 316.51
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0072,
+              0.0029,
+              0.003
+            ],
+            "mean_s": 0.0044,
+            "std_s": 0.002,
+            "gflops": 489.67
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0219,
+              0.0208,
+              0.0257
+            ],
+            "mean_s": 0.0228,
+            "std_s": 0.0021,
+            "gflops": 753.92
+          }
+        }
+      },
+      "memory_bandwidth": {
+        "test": "Memory Bandwidth",
+        "method": "NumPy array operations (256 Mo)",
+        "data_size_gb": 0.25,
+        "results": {
+          "write": {
+            "mean_s": 0.061,
+            "bandwidth_gb_s": 4.1
+          },
+          "read": {
+            "mean_s": 0.007,
+            "bandwidth_gb_s": 35.48
+          },
+          "copy": {
+            "mean_s": 0.0287,
+            "bandwidth_gb_s": 8.72
+          }
+        }
+      },
+      "gpu_compute": {
+        "test": "GPU Compute",
+        "status": "completed",
+        "device": "Apple Silicon (MPS)",
+        "backend": "Metal/MPS",
+        "results": {
+          "1024x1024": {
+            "times_s": [
+              0.0943,
+              0.0029,
+              0.0029
+            ],
+            "mean_s": 0.0334,
+            "gflops": 64.34
+          },
+          "2048x2048": {
+            "times_s": [
+              0.192,
+              0.0184,
+              0.0165
+            ],
+            "mean_s": 0.0756,
+            "gflops": 227.16
+          },
+          "4096x4096": {
+            "times_s": [
+              0.1846,
+              0.0975,
+              0.0954
+            ],
+            "mean_s": 0.1259,
+            "gflops": 1092.05
+          }
+        }
+      }
+    },
+    "resource_usage": {
+      "n_samples": 24,
+      "duration_s": 12.284422159194946,
+      "cpu": {
+        "avg_percent": 29.0,
+        "max_percent": 53.0,
+        "min_percent": 0.0
+      },
+      "ram": {
+        "avg_percent": 84.9,
+        "max_percent": 86.0,
+        "peak_used_gb": 3.71
+      }
+    }
+  },
+  "ai_benchmarks": {
+    "type": "ai_benchmarks",
+    "prompt": "Explain the concept of artificial intelligence in simple terms. What are its main applications and how does it impact our daily lives? Provide specific examples.",
+    "inference_config": {
+      "max_tokens": 256,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "repeat_penalty": 1.1,
+      "n_ctx": 2048,
+      "seed": 42,
+      "n_warmup_runs": 1,
+      "n_benchmark_runs": 3
+    },
+    "total_time_s": 147.98,
+    "models_tested": 1,
+    "results": {
+      "tinyllama-1.1b": {
+        "model": "TinyLlama 1.1B",
+        "params": "1.1B",
+        "status": "completed",
+        "runs": [
+          {
+            "tokens_generated": 256,
+            "total_time_s": 4.6419,
+            "first_token_latency_s": 0.084,
+            "tokens_per_second": 55.15,
+            "memory_before_gb": 1.105,
+            "memory_after_gb": 0.758,
+            "memory_delta_gb": -0.347,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 17.87,
+            "p90_inter_token_latency_ms": 18.4
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 4.4495,
+            "first_token_latency_s": 0.0173,
+            "tokens_per_second": 57.54,
+            "memory_before_gb": 0.763,
+            "memory_after_gb": 0.754,
+            "memory_delta_gb": -0.009,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 17.38,
+            "p90_inter_token_latency_ms": 17.84
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 4.4404,
+            "first_token_latency_s": 0.0167,
+            "tokens_per_second": 57.65,
+            "memory_before_gb": 0.755,
+            "memory_after_gb": 0.755,
+            "memory_delta_gb": 0.0,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 17.35,
+            "p90_inter_token_latency_ms": 17.61
+          }
+        ],
+        "backend": {
+          "backend": "metal",
+          "n_gpu_layers": -1,
+          "details": "Apple Silicon détecté, utilisation de Metal"
+        },
+        "model_load_time_s": 0.53,
+        "resource_usage": {
+          "n_samples": 25,
+          "duration_s": 13.429775953292847,
+          "cpu": {
+            "avg_percent": 19.4,
+            "max_percent": 51.0,
+            "min_percent": 0.0
+          },
+          "ram": {
+            "avg_percent": 84.6,
+            "max_percent": 87.0,
+            "peak_used_gb": 3.68
+          }
+        },
+        "summary": {
+          "n_successful_runs": 3,
+          "n_total_runs": 3,
+          "avg_tokens_per_second": 56.78,
+          "std_tokens_per_second": 1.15,
+          "avg_first_token_latency_s": 0.0393,
+          "avg_total_time_s": 4.5106,
+          "peak_memory_gb": 0.758,
+          "stability": "stable"
+        }
+      }
+    },
+    "quantization_comparison": {
+      "tinyllama-1.1b": {
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "Q2_K",
+          "Q3_K_M",
+          "Q4_K_M",
+          "Q5_K_M",
+          "Q6_K",
+          "Q8_0"
+        ],
+        "results": {
+          "Q2_K": {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.0303,
+                "first_token_latency_s": 0.0188,
+                "tokens_per_second": 63.52,
+                "memory_before_gb": 0.816,
+                "memory_after_gb": 0.738,
+                "memory_delta_gb": -0.078,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 15.73,
+                "p90_inter_token_latency_ms": 16.65
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.2188,
+                "first_token_latency_s": 0.0164,
+                "tokens_per_second": 60.68,
+                "memory_before_gb": 0.738,
+                "memory_after_gb": 0.524,
+                "memory_delta_gb": -0.215,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.48,
+                "p90_inter_token_latency_ms": 16.83
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.319,
+                "first_token_latency_s": 0.0875,
+                "tokens_per_second": 59.27,
+                "memory_before_gb": 0.524,
+                "memory_after_gb": 0.501,
+                "memory_delta_gb": -0.023,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.59,
+                "p90_inter_token_latency_ms": 16.92
+              }
+            ],
+            "actual_file_size_gb": 0.45,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.41,
+            "memory_after_load_gb": 1.143,
+            "resource_usage": {
+              "n_samples": 23,
+              "duration_s": 12.350865125656128,
+              "cpu": {
+                "avg_percent": 24.4,
+                "max_percent": 70.1,
+                "min_percent": 13.0
+              },
+              "ram": {
+                "avg_percent": 84.2,
+                "max_percent": 86.2,
+                "peak_used_gb": 3.6
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 61.16,
+              "std_tokens_per_second": 1.77,
+              "min_tokens_per_second": 59.27,
+              "max_tokens_per_second": 63.52,
+              "avg_first_token_latency_s": 0.0409,
+              "avg_inter_token_latency_ms": 16.27,
+              "avg_total_time_s": 4.1894,
+              "peak_memory_gb": 0.738,
+              "stability": "stable"
+            }
+          },
+          "Q3_K_M": {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.51,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.2314,
+                "first_token_latency_s": 0.0312,
+                "tokens_per_second": 60.5,
+                "memory_before_gb": 0.829,
+                "memory_after_gb": 0.778,
+                "memory_delta_gb": -0.051,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.47,
+                "p90_inter_token_latency_ms": 17.74
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.3307,
+                "first_token_latency_s": 0.0174,
+                "tokens_per_second": 59.11,
+                "memory_before_gb": 0.778,
+                "memory_after_gb": 0.616,
+                "memory_delta_gb": -0.162,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.91,
+                "p90_inter_token_latency_ms": 17.86
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.3095,
+                "first_token_latency_s": 0.0172,
+                "tokens_per_second": 59.4,
+                "memory_before_gb": 0.616,
+                "memory_after_gb": 0.6,
+                "memory_delta_gb": -0.016,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.83,
+                "p90_inter_token_latency_ms": 17.4
+              }
+            ],
+            "actual_file_size_gb": 0.513,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.4,
+            "memory_after_load_gb": 1.1,
+            "resource_usage": {
+              "n_samples": 24,
+              "duration_s": 12.723551034927368,
+              "cpu": {
+                "avg_percent": 17.8,
+                "max_percent": 33.2,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 84.0,
+                "max_percent": 87.4,
+                "peak_used_gb": 3.71
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 59.67,
+              "std_tokens_per_second": 0.6,
+              "min_tokens_per_second": 59.11,
+              "max_tokens_per_second": 60.5,
+              "avg_first_token_latency_s": 0.0219,
+              "avg_inter_token_latency_ms": 16.74,
+              "avg_total_time_s": 4.2905,
+              "peak_memory_gb": 0.778,
+              "stability": "stable"
+            }
+          },
+          "Q4_K_M": {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.62,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.5281,
+                "first_token_latency_s": 0.1079,
+                "tokens_per_second": 56.54,
+                "memory_before_gb": 0.906,
+                "memory_after_gb": 0.724,
+                "memory_delta_gb": -0.182,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 17.33,
+                "p90_inter_token_latency_ms": 18.12
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.4632,
+                "first_token_latency_s": 0.0763,
+                "tokens_per_second": 57.36,
+                "memory_before_gb": 0.724,
+                "memory_after_gb": 0.707,
+                "memory_delta_gb": -0.018,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 17.19,
+                "p90_inter_token_latency_ms": 18.01
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.3948,
+                "first_token_latency_s": 0.0227,
+                "tokens_per_second": 58.25,
+                "memory_before_gb": 0.708,
+                "memory_after_gb": 0.708,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 17.0,
+                "p90_inter_token_latency_ms": 17.98
+              }
+            ],
+            "actual_file_size_gb": 0.623,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.46,
+            "memory_after_load_gb": 0.94,
+            "resource_usage": {
+              "n_samples": 25,
+              "duration_s": 13.393678665161133,
+              "cpu": {
+                "avg_percent": 21.6,
+                "max_percent": 38.8,
+                "min_percent": 12.5
+              },
+              "ram": {
+                "avg_percent": 85.2,
+                "max_percent": 87.4,
+                "peak_used_gb": 3.66
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 57.38,
+              "std_tokens_per_second": 0.7,
+              "min_tokens_per_second": 56.54,
+              "max_tokens_per_second": 58.25,
+              "avg_first_token_latency_s": 0.069,
+              "avg_inter_token_latency_ms": 17.17,
+              "avg_total_time_s": 4.462,
+              "peak_memory_gb": 0.724,
+              "stability": "stable"
+            }
+          },
+          "Q5_K_M": {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.73,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.9276,
+                "first_token_latency_s": 0.1196,
+                "tokens_per_second": 51.95,
+                "memory_before_gb": 1.098,
+                "memory_after_gb": 0.954,
+                "memory_delta_gb": -0.144,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 18.85,
+                "p90_inter_token_latency_ms": 19.6
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.8539,
+                "first_token_latency_s": 0.019,
+                "tokens_per_second": 52.74,
+                "memory_before_gb": 0.955,
+                "memory_after_gb": 0.804,
+                "memory_delta_gb": -0.151,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 18.95,
+                "p90_inter_token_latency_ms": 19.9
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 5.0224,
+                "first_token_latency_s": 0.0196,
+                "tokens_per_second": 50.97,
+                "memory_before_gb": 0.804,
+                "memory_after_gb": 0.757,
+                "memory_delta_gb": -0.047,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 19.61,
+                "p90_inter_token_latency_ms": 19.89
+              }
+            ],
+            "actual_file_size_gb": 0.729,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.65,
+            "memory_after_load_gb": 1.161,
+            "resource_usage": {
+              "n_samples": 27,
+              "duration_s": 14.511850118637085,
+              "cpu": {
+                "avg_percent": 18.9,
+                "max_percent": 33.6,
+                "min_percent": 12.1
+              },
+              "ram": {
+                "avg_percent": 84.8,
+                "max_percent": 87.8,
+                "peak_used_gb": 3.75
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 51.89,
+              "std_tokens_per_second": 0.72,
+              "min_tokens_per_second": 50.97,
+              "max_tokens_per_second": 52.74,
+              "avg_first_token_latency_s": 0.0527,
+              "avg_inter_token_latency_ms": 19.14,
+              "avg_total_time_s": 4.9346,
+              "peak_memory_gb": 0.954,
+              "stability": "stable"
+            }
+          },
+          "Q6_K": {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.84,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 5.4272,
+                "first_token_latency_s": 0.0276,
+                "tokens_per_second": 47.17,
+                "memory_before_gb": 1.045,
+                "memory_after_gb": 0.876,
+                "memory_delta_gb": -0.169,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 21.17,
+                "p90_inter_token_latency_ms": 24.21
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 5.4389,
+                "first_token_latency_s": 0.0301,
+                "tokens_per_second": 47.07,
+                "memory_before_gb": 0.883,
+                "memory_after_gb": 0.886,
+                "memory_delta_gb": 0.004,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 21.21,
+                "p90_inter_token_latency_ms": 22.43
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 5.2703,
+                "first_token_latency_s": 0.0205,
+                "tokens_per_second": 48.57,
+                "memory_before_gb": 0.886,
+                "memory_after_gb": 0.887,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 20.58,
+                "p90_inter_token_latency_ms": 21.34
+              }
+            ],
+            "actual_file_size_gb": 0.842,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.71,
+            "memory_after_load_gb": 1.101,
+            "resource_usage": {
+              "n_samples": 30,
+              "duration_s": 16.105181217193604,
+              "cpu": {
+                "avg_percent": 20.4,
+                "max_percent": 33.2,
+                "min_percent": 13.4
+              },
+              "ram": {
+                "avg_percent": 84.6,
+                "max_percent": 88.4,
+                "peak_used_gb": 3.93
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 47.6,
+              "std_tokens_per_second": 0.68,
+              "min_tokens_per_second": 47.07,
+              "max_tokens_per_second": 48.57,
+              "avg_first_token_latency_s": 0.0261,
+              "avg_inter_token_latency_ms": 20.99,
+              "avg_total_time_s": 5.3788,
+              "peak_memory_gb": 0.887,
+              "stability": "stable"
+            }
+          },
+          "Q8_0": {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 6.6391,
+                "first_token_latency_s": 0.0873,
+                "tokens_per_second": 38.56,
+                "memory_before_gb": 1.283,
+                "memory_after_gb": 1.083,
+                "memory_delta_gb": -0.201,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 25.69,
+                "p90_inter_token_latency_ms": 25.7
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 6.512,
+                "first_token_latency_s": 0.0268,
+                "tokens_per_second": 39.31,
+                "memory_before_gb": 1.09,
+                "memory_after_gb": 1.096,
+                "memory_delta_gb": 0.006,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 25.43,
+                "p90_inter_token_latency_ms": 25.85
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 6.6166,
+                "first_token_latency_s": 0.0257,
+                "tokens_per_second": 38.69,
+                "memory_before_gb": 1.096,
+                "memory_after_gb": 1.082,
+                "memory_delta_gb": -0.014,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 25.84,
+                "p90_inter_token_latency_ms": 25.86
+              }
+            ],
+            "actual_file_size_gb": 1.09,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "Apple Silicon détecté, utilisation de Metal"
+            },
+            "model_load_time_s": 0.92,
+            "memory_after_load_gb": 1.436,
+            "resource_usage": {
+              "n_samples": 36,
+              "duration_s": 19.617151021957397,
+              "cpu": {
+                "avg_percent": 20.0,
+                "max_percent": 45.0,
+                "min_percent": 12.4
+              },
+              "ram": {
+                "avg_percent": 86.1,
+                "max_percent": 88.8,
+                "peak_used_gb": 3.98
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 38.85,
+              "std_tokens_per_second": 0.33,
+              "min_tokens_per_second": 38.56,
+              "max_tokens_per_second": 39.31,
+              "avg_first_token_latency_s": 0.0466,
+              "avg_inter_token_latency_ms": 25.65,
+              "avg_total_time_s": 6.5892,
+              "peak_memory_gb": 1.096,
+              "stability": "stable"
+            }
+          }
+        },
+        "total_time_s": 127.77,
+        "comparison_table": [
+          {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "tokens_per_second": 61.16,
+            "first_token_latency_s": 0.0409,
+            "inter_token_latency_ms": 16.27,
+            "peak_memory_gb": 0.738,
+            "model_load_time_s": 0.41,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.513,
+            "tokens_per_second": 59.67,
+            "first_token_latency_s": 0.0219,
+            "inter_token_latency_ms": 16.74,
+            "peak_memory_gb": 0.778,
+            "model_load_time_s": 0.4,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.623,
+            "tokens_per_second": 57.38,
+            "first_token_latency_s": 0.069,
+            "inter_token_latency_ms": 17.17,
+            "peak_memory_gb": 0.724,
+            "model_load_time_s": 0.46,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.729,
+            "tokens_per_second": 51.89,
+            "first_token_latency_s": 0.0527,
+            "inter_token_latency_ms": 19.14,
+            "peak_memory_gb": 0.954,
+            "model_load_time_s": 0.65,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.842,
+            "tokens_per_second": 47.6,
+            "first_token_latency_s": 0.0261,
+            "inter_token_latency_ms": 20.99,
+            "peak_memory_gb": 0.887,
+            "model_load_time_s": 0.71,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "tokens_per_second": 38.85,
+            "first_token_latency_s": 0.0466,
+            "inter_token_latency_ms": 25.65,
+            "peak_memory_gb": 1.096,
+            "model_load_time_s": 0.92,
+            "stability": "stable"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -173,6 +173,27 @@ def download_quantization(
         )
 
 
+def delete_quantization(model_key: str, quant_key: str) -> bool:
+    """
+    Supprime une variante de quantification téléchargée.
+
+    Args:
+        model_key: Clé du modèle.
+        quant_key: Clé de la quantification (ex: "Q4_K_M").
+
+    Returns:
+        True si le fichier a été supprimé, False sinon.
+    """
+    variants = get_available_quantizations(model_key)
+    if quant_key not in variants:
+        return False
+    filepath = MODELS_DIR / variants[quant_key]["filename"]
+    if filepath.exists():
+        filepath.unlink()
+        return True
+    return False
+
+
 def download_model(
     model_key: str,
     progress_callback: Optional[Callable] = None,

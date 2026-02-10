@@ -30,6 +30,7 @@ from src.benchmark_ai import (
     get_compatible_quantizations,
     is_quantization_downloaded,
     download_quantization,
+    delete_quantization,
 )
 from src.results_manager import (
     save_results,
@@ -257,6 +258,29 @@ def page_hardware():
         cols[3].write(f"RAM min: {model['min_ram_gb']} Go")
         cols[4].write(dl_icon + (" Téléchargé" if is_downloaded else " Non téléchargé"))
         cols[5].write("Compatible" if is_compat else "Incompatible")
+
+        # Détail des quantifications
+        variants = get_available_quantizations(key)
+        if variants:
+            with st.expander(f"Quantifications disponibles — {model['name']}", expanded=False):
+                for qk, qv in variants.items():
+                    q_downloaded = is_quantization_downloaded(key, qk)
+                    q_compat = qv["min_ram_gb"] <= ram_total
+
+                    q_cols = st.columns([0.3, 1.2, 0.8, 0.8, 0.8, 0.6])
+                    q_cols[0].write("" if q_compat else "")
+                    q_cols[1].write(f"**{qk}** ({qv['bits']}-bit)")
+                    q_cols[2].write(f"{qv['size_gb']} Go")
+                    q_cols[3].write(f"RAM min: {qv['min_ram_gb']} Go")
+
+                    if q_downloaded:
+                        q_cols[4].write("Installé")
+                        if q_cols[5].button("🗑️", key=f"del_{key}_{qk}", help=f"Supprimer {model['name']} {qk}"):
+                            delete_quantization(key, qk)
+                            st.rerun()
+                    else:
+                        q_cols[4].write("Non installé")
+                        q_cols[5].write("")
 
     # Export JSON brut
     with st.expander("Données brutes (JSON)"):
