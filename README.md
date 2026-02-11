@@ -258,6 +258,94 @@ Modifiez `src/config.py` pour ajuster :
 
 ---
 
+## To-Do
+
+### Haute priorité
+
+- [ ] **Détection matérielle**
+  - Ajouter la détection des GPU AMD :
+    - `rocm-smi` (Linux)
+    - `lspci` (fallback Linux)
+    - WMI / Win32_VideoController (Windows)
+  - Ajouter la détection des GPU Intel (Arc / XPU) :
+    - `xpu-smi`
+    - Level Zero
+    - `lspci` (Linux)
+    - WMI (Windows)
+  - Ajouter les backends détectés : `rocm`, `xpu`, `sycl`
+
+- [ ] **Benchmark classique GPU**
+  - Support explicite AMD ROCm (identifier via `torch.version.hip`)
+  - Support Intel XPU (`torch.xpu.is_available()`)
+  - Synchronisation adaptée par device :
+    - `torch.cuda.synchronize()`
+    - `torch.xpu.synchronize()`
+    - `torch.mps.synchronize()`
+  - Ajouter monitoring :
+    - AMD : `rocm-smi --showuse --showmemuse --showtemp`
+    - Intel : `xpu-smi dump` / `intel_gpu_top`
+  - Distinguer CUDA vs ROCm dans l’affichage des résultats
+
+- [ ] **Benchmark AI / LLM**
+  - Étendre `detect_best_backend()` :
+    - ROCm (HIPBLAS)
+    - Vulkan
+    - SYCL (Intel)
+    - CLBlast / OpenCL (fallback générique)
+  - Gérer explicitement les backends llama-cpp-python :
+    - `-DGGML_CUDA=on`
+    - `-DGGML_HIPBLAS=on`
+    - `-DGGML_VULKAN=on`
+    - `-DGGML_SYCL=on`
+    - `-DGGML_CLBLAST=on`
+  - Vérifier à l’exécution que le backend compilé correspond au GPU détecté
+
+---
+
+### Priorité moyenne
+
+- [ ] **Installation guidée de llama-cpp-python**
+  - Détecter automatiquement le GPU au premier lancement
+  - Proposer la bonne commande d’installation selon la plateforme
+  - Ajouter un script d’installation automatique par OS
+  - Afficher un avertissement si version CPU-only détectée
+
+- [ ] **Monitoring unifié**
+  - Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`
+  - Normaliser le format des métriques (utilisation %, VRAM, température)
+
+---
+
+### Priorité basse
+
+- [ ] **Support multi-GPU**
+  - Détection de plusieurs GPU
+  - Sélection via :
+    - `CUDA_VISIBLE_DEVICES`
+    - `HIP_VISIBLE_DEVICES`
+    - `ZE_AFFINITY_MASK`
+  - Benchmark individuel par GPU
+
+- [ ] **Gestion RAM vs VRAM**
+  - Distinguer RAM système et VRAM GPU
+  - Adapter `get_compatible_quantizations()` en fonction de la VRAM
+  - Recommandations dynamiques de modèles selon mémoire disponible
+
+- [ ] **Backend Vulkan universel**
+  - Ajouter détection via `vulkaninfo`
+  - Documenter Vulkan comme backend cross-vendor (AMD / Intel / NVIDIA)
+
+- [ ] **Documentation**
+  - Ajouter tableau comparatif des backends supportés par plateforme
+  - Documenter les prérequis ROCm / SYCL / Vulkan
+  - Ajouter exemples d’installation par architecture :
+    - Windows x86 + NVIDIA
+    - Linux + AMD ROCm
+    - Windows/Linux + Vulkan
+    - macOS ARM + Metal
+
+---
+
 ## Notes importantes
 
 - Les modèles GGUF sont téléchargés dans le dossier `models/` (plusieurs Go par modèle).
