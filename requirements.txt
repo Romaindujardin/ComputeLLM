@@ -17,5 +17,8 @@ streamlit>=1.30.0
 plotly>=5.18.0
 pandas>=2.0.0
 
+# HTTP client (for llama-server mode)
+requests>=2.28.0
+
 # Optional: GPU benchmarks
 # torch>=2.0.0

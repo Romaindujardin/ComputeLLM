@@ -280,3 +280,23 @@ CLASSIC_BENCHMARK_CONFIG = {
 # Paramètres de monitoring
 # =============================================================================
 MONITOR_INTERVAL = 0.5  # Intervalle d'échantillonnage en secondes
+
+# =============================================================================
+# Configuration llama-server (mode serveur HTTP)
+# Permet d'utiliser des binaires pré-compilés de llama.cpp
+# au lieu de compiler llama-cpp-python depuis les sources.
+# =============================================================================
+LLAMA_SERVER_CONFIG = {
+    "host": "127.0.0.1",
+    "port": 8080,
+    "startup_timeout_s": 120,       # Temps max pour démarrer le serveur
+    "health_check_interval_s": 1.0, # Intervalle entre les checks de santé
+    "shutdown_timeout_s": 10,       # Temps max pour arrêter le serveur
+}
+
+# Noms de binaire à rechercher selon l'OS
+LLAMA_SERVER_BINARY_NAMES = {
+    "Darwin": ["llama-server", "llama-server-metal", "server"],
+    "Windows": ["llama-server.exe", "server.exe"],
+    "Linux": ["llama-server", "llama-server-cuda", "llama-server-vulkan", "server"],
+}

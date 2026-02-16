@@ -16,7 +16,8 @@ ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de d
 
 - **Détection matérielle automatique** : OS, CPU (modèle, cœurs, fréquence), GPU (VRAM, backend), RAM (totale, disponible, unifiée)
 - **Benchmarks classiques** : CPU single-thread, CPU multi-thread, bande passante mémoire, GPU compute
-- **Benchmarks IA** : Inférence locale de LLM via `llama-cpp-python` (GGUF)
+- **Benchmarks IA** : Inférence locale de LLM via `llama-cpp-python` (GGUF) ou `llama-server` (HTTP)
+- **Mode llama-server** : Utilise des binaires pré-compilés — aucune compilation requise côté Python
 - **Modèles supportés** : TinyLlama 1.1B, Mistral 7B, Llama 2 13B, CodeLlama 34B, Llama 2 70B
 - **Téléchargement automatique** depuis Hugging Face
 - **Métriques mesurées** : tokens/s, latence du 1er token, mémoire utilisée, stabilité
@@ -39,6 +40,7 @@ ComputeLLM/
 │   ├── hardware_detect.py     # Détection matérielle
 │   ├── benchmark_classic.py   # Benchmarks CPU/GPU/RAM
 │   ├── benchmark_ai.py        # Benchmarks inférence LLM
+│   ├── llama_server.py        # Gestionnaire llama-server (HTTP)
 │   └── results_manager.py     # Sauvegarde et comparaison
 ├── models/                    # Modèles GGUF téléchargés
 └── results/                   # Résultats de benchmark (JSON)
@@ -90,6 +92,8 @@ pip install -r requirements.txt
 
 ### 3. Installer llama-cpp-python (selon votre matériel)
 
+> **Alternative sans compilation** : voir la section [Mode llama-server](#mode-llama-server-sans-compilation) ci-dessous.
+
 #### macOS (Apple Silicon — Metal)
 
 ```bash
@@ -121,6 +125,32 @@ pip install torch torchvision
 ```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
+
+### 5. Mode llama-server (sans compilation)
+
+Si vous ne pouvez pas (ou ne voulez pas) compiler `llama-cpp-python` depuis les sources (problèmes de Visual Studio, oneAPI Toolkit, etc.), vous pouvez utiliser le **mode llama-server** :
+
+1. **Télécharger le binaire pré-compilé** depuis les [releases de llama.cpp](https://github.com/ggerganov/llama.cpp/releases) :
+   - Windows CUDA : `llama-*-bin-win-cuda-*`
+   - Windows Vulkan : `llama-*-bin-win-vulkan-*`
+   - Windows SYCL : `llama-*-bin-win-sycl-*`
+   - Linux CUDA : `llama-*-bin-ubuntu-*-cuda-*`
+   - macOS Metal : `llama-*-bin-macos-*`
+
+2. **Extraire l'archive** et repérer le binaire `llama-server` (ou `llama-server.exe` sur Windows)
+
+3. **Dans ComputeLLM**, activer le toggle **"Utiliser llama-server"** dans la page Benchmark, puis configurer :
+   - **Mode Auto** : indiquer le chemin vers le binaire `llama-server`. ComputeLLM démarre/arrête le serveur automatiquement.
+   - **Mode Manuel** : lancer `llama-server` vous-même, puis renseigner l'adresse (ex: `127.0.0.1:8080`).
+
+#### Lancement manuel de llama-server
+
+```bash
+# Exemple : lancer le serveur avec un modèle GGUF
+./llama-server -m models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf --port 8080 -ngl -1
+```
+
+> Le serveur expose une API compatible OpenAI sur `http://127.0.0.1:8080`. ComputeLLM s'y connecte automatiquement pour les benchmarks.
 
 ---
 
@@ -298,8 +328,7 @@ Modifiez `src/config.py` pour ajuster :
     - `-DGGML_VULKAN=on`
     - `-DGGML_SYCL=on`
     - `-DGGML_CLBLAST=on`
-  - Vérifier à l’exécution que le backend compilé correspond au GPU détecté
-
+  - Vérifier à l’exécution que le backend compilé correspond au GPU détecté  - ~~Mode llama-server (binaires pré-compilés, zéro compilation)~~ ✅
 ---
 
 ### Priorité moyenne
@@ -308,8 +337,7 @@ Modifiez `src/config.py` pour ajuster :
   - Détecter automatiquement le GPU au premier lancement
   - Proposer la bonne commande d’installation selon la plateforme
   - Ajouter un script d’installation automatique par OS
-  - Afficher un avertissement si version CPU-only détectée
-
+  - Afficher un avertissement si version CPU-only détectée  - ~~Mode llama-server comme alternative sans compilation~~ ✅
 - [ ] **Monitoring unifié**
   - Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`
   - Normaliser le format des métriques (utilisation %, VRAM, température)

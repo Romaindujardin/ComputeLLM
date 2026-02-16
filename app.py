@@ -32,6 +32,13 @@ from src.benchmark_ai import (
     download_quantization,
     delete_quantization,
 )
+from src.llama_server import (
+    find_llama_server_binary,
+    LlamaServerManager,
+    check_server_status,
+    run_all_server_benchmarks,
+    get_llama_cpp_releases_url,
+)
 from src.results_manager import (
     save_results,
     list_results,
@@ -121,6 +128,16 @@ if "last_save_path" not in st.session_state:
     st.session_state.last_save_path = None
 if "quant_results" not in st.session_state:
     st.session_state.quant_results = None
+if "server_mode" not in st.session_state:
+    st.session_state.server_mode = False
+if "server_binary_path" not in st.session_state:
+    st.session_state.server_binary_path = ""
+if "server_host" not in st.session_state:
+    st.session_state.server_host = "127.0.0.1"
+if "server_port" not in st.session_state:
+    st.session_state.server_port = 8080
+if "server_auto_mode" not in st.session_state:
+    st.session_state.server_auto_mode = True
 
 
 # =============================================================================
@@ -397,6 +414,82 @@ def page_benchmark():
     else:
         st.info("Aucun modèle compatible pour la comparaison de quantification.")
 
+    # ─── Mode d'inférence : llama-cpp-python vs llama-server ───
+    st.markdown("---")
+    st.markdown("### Mode d'inférence")
+    st.caption(
+        "**llama-cpp-python** : bindings Python (nécessite compilation avec le bon backend). "
+        "**llama-server** : binaire pré-compilé (aucune compilation côté Python, "
+        "[téléchargement ici]({releases_url})).".format(releases_url=get_llama_cpp_releases_url())
+    )
+
+    server_mode = st.toggle(
+        "Utiliser llama-server (mode HTTP)",
+        value=st.session_state.server_mode,
+        key="server_mode_toggle",
+        help="Utilise un binaire llama-server pré-compilé au lieu de llama-cpp-python",
+    )
+    st.session_state.server_mode = server_mode
+
+    if server_mode:
+        srv_col1, srv_col2 = st.columns(2)
+
+        with srv_col1:
+            auto_mode = st.radio(
+                "Mode serveur",
+                ["Auto (ComputeLLM démarre le serveur)", "Manuel (serveur externe)"],
+                index=0 if st.session_state.server_auto_mode else 1,
+                key="server_mode_radio",
+            )
+            st.session_state.server_auto_mode = auto_mode.startswith("Auto")
+
+        with srv_col2:
+            if st.session_state.server_auto_mode:
+                # Détection automatique du binaire
+                detected_binary = find_llama_server_binary()
+                default_path = detected_binary or st.session_state.server_binary_path
+
+                binary_path = st.text_input(
+                    "Chemin vers llama-server",
+                    value=default_path,
+                    placeholder="/chemin/vers/llama-server",
+                    key="server_binary_input",
+                    help="Chemin vers le binaire llama-server. Auto-détecté si dans le PATH.",
+                )
+                st.session_state.server_binary_path = binary_path
+
+                if binary_path:
+                    st.success(f"Binaire : `{binary_path}`")
+                else:
+                    st.warning(
+                        "Binaire llama-server introuvable. "
+                        f"[Télécharger les binaires pré-compilés]({get_llama_cpp_releases_url()})"
+                    )
+            else:
+                # Mode manuel — connexion à un serveur existant
+                m_col1, m_col2 = st.columns(2)
+                with m_col1:
+                    host = st.text_input(
+                        "Host", value=st.session_state.server_host, key="server_host_input"
+                    )
+                    st.session_state.server_host = host
+                with m_col2:
+                    port = st.number_input(
+                        "Port", value=st.session_state.server_port,
+                        min_value=1, max_value=65535, key="server_port_input"
+                    )
+                    st.session_state.server_port = int(port)
+
+                # Vérifier le statut du serveur
+                if st.button("Vérifier la connexion", key="check_server"):
+                    status = check_server_status(host, int(port))
+                    if status["running"]:
+                        st.success(f"Serveur actif sur {status['url']}")
+                        if status.get("info"):
+                            st.json(status["info"])
+                    else:
+                        st.error(f"Aucun serveur trouvé sur {status['url']}")
+
     st.markdown("---")
 
     # Résumé de la configuration
@@ -406,12 +499,14 @@ def page_benchmark():
     n_quant_tests = sum(len(qs) for qs in quant_selections.values())
     n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests
 
-    cols = st.columns(5)
+    inference_mode_label = "llama-server" if server_mode else "llama-cpp-python"
+    cols = st.columns(6)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
-    cols[1].metric("Modèles sélectionnés", len(selected_models))
-    cols[2].metric("Tests quantification", n_quant_tests)
-    cols[3].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
-    cols[4].metric("Tests total", n_tests)
+    cols[1].metric("Mode inférence", inference_mode_label)
+    cols[2].metric("Modèles sélectionnés", len(selected_models))
+    cols[3].metric("Tests quantification", n_quant_tests)
+    cols[4].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
+    cols[5].metric("Tests total", n_tests)
 
     st.markdown("---")
 
@@ -470,7 +565,8 @@ def page_benchmark():
         has_ai_work = bool(selected_models) or bool(quant_selections)
 
         if has_ai_work:
-            st.markdown("### Benchmarks IA (Inférence LLM)")
+            mode_label = "serveur" if server_mode else "llama-cpp-python"
+            st.markdown(f"### Benchmarks IA (Inférence LLM — {mode_label})")
             ai_progress = st.progress(0.0)
             ai_status = st.status("Benchmarks IA en cours...", expanded=True)
 
@@ -502,14 +598,45 @@ def page_benchmark():
                             except Exception as e:
                                 st.error(f"Erreur téléchargement {model_info['name']} {qk}: {e}")
 
-                # Exécution des benchmarks (modèles + quantification intégrés)
+                # Exécution des benchmarks
                 st.write("Exécution des inférences...")
                 try:
-                    ai_results = run_all_ai_benchmarks(
-                        model_keys=selected_models if selected_models else [],
-                        quantization_models=quant_selections if quant_selections else None,
-                        progress_callback=ai_callback,
-                    )
+                    if server_mode:
+                        # ── Mode llama-server ──
+                        if st.session_state.server_auto_mode:
+                            srv_binary = st.session_state.server_binary_path
+                            if not srv_binary:
+                                raise RuntimeError(
+                                    "Aucun binaire llama-server configuré. "
+                                    "Configurez le chemin ou téléchargez-le depuis "
+                                    f"{get_llama_cpp_releases_url()}"
+                                )
+                            srv = LlamaServerManager(
+                                binary_path=srv_binary,
+                                host=st.session_state.server_host,
+                                port=st.session_state.server_port,
+                            )
+                        else:
+                            srv = LlamaServerManager(
+                                binary_path=None,
+                                host=st.session_state.server_host,
+                                port=st.session_state.server_port,
+                            )
+
+                        ai_results = run_all_server_benchmarks(
+                            model_keys=selected_models if selected_models else [],
+                            quantization_models=quant_selections if quant_selections else None,
+                            server_manager=srv,
+                            progress_callback=ai_callback,
+                        )
+                    else:
+                        # ── Mode llama-cpp-python classique ──
+                        ai_results = run_all_ai_benchmarks(
+                            model_keys=selected_models if selected_models else [],
+                            quantization_models=quant_selections if quant_selections else None,
+                            progress_callback=ai_callback,
+                        )
+
                     st.session_state.ai_results = ai_results
                     ai_status.update(
                         label=f"Benchmarks IA terminés ({ai_results['total_time_s']:.1f}s)",
