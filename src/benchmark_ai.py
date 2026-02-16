@@ -21,6 +21,9 @@ from src.config import (
     BENCHMARK_PROMPT,
     INFERENCE_CONFIG,
     QUANTIZATION_VARIANTS,
+    TEMPERATURE_VARIANTS,
+    LANGUAGE_PROMPTS,
+    PROMPT_TYPE_VARIANTS,
 )
 from src.benchmark_classic import ResourceMonitor, system_cleanup
 
@@ -360,17 +363,26 @@ def run_single_inference(
     model,
     prompt: str = BENCHMARK_PROMPT,
     max_tokens: int = None,
+    temperature: float = None,
 ) -> Dict[str, Any]:
     """
     Exécute une inférence unique et mesure les métriques.
     Utilise le format chat (create_chat_completion) pour une meilleure
     compatibilité avec toutes les quantifications des modèles instruct/chat.
     
+    Args:
+        model: Instance Llama chargée.
+        prompt: Texte du prompt utilisateur.
+        max_tokens: Nombre max de tokens à générer.
+        temperature: Température de génération (override INFERENCE_CONFIG si fourni).
+    
     Returns:
         Dict avec latence premier token, tokens/s, mémoire, etc.
     """
     if max_tokens is None:
         max_tokens = INFERENCE_CONFIG["max_tokens"]
+    if temperature is None:
+        temperature = INFERENCE_CONFIG["temperature"]
 
     # Mesurer la mémoire avant
     process = psutil.Process()
@@ -393,7 +405,7 @@ def run_single_inference(
                 {"role": "user", "content": prompt},
             ],
             max_tokens=max_tokens,
-            temperature=INFERENCE_CONFIG["temperature"],
+            temperature=temperature,
             top_p=INFERENCE_CONFIG["top_p"],
             repeat_penalty=INFERENCE_CONFIG["repeat_penalty"],
             stream=True,
@@ -822,16 +834,26 @@ def run_quantization_comparison(
 def run_all_ai_benchmarks(
     model_keys: List[str] = None,
     quantization_models: Dict[str, List[str]] = None,
+    temperature_models: Dict[str, List[str]] = None,
+    language_models: Dict[str, List[str]] = None,
+    prompt_type_models: Dict[str, List[str]] = None,
     progress_callback: Optional[Callable] = None,
 ) -> Dict[str, Any]:
     """
     Exécute les benchmarks IA pour tous les modèles sélectionnés,
-    incluant optionnellement la comparaison de quantification.
+    incluant optionnellement la comparaison de quantification,
+    température, langue et type de prompt.
 
     Args:
         model_keys: Liste des clés de modèles à tester.
         quantization_models: Dict {model_key: [quant_key, ...]} pour
             le comparatif de quantification. Si None, pas de comparatif.
+        temperature_models: Dict {model_key: [temp_key, ...]} pour
+            le comparatif de température. Si None, pas de comparatif.
+        language_models: Dict {model_key: [lang_key, ...]} pour
+            le comparatif de langue. Si None, pas de comparatif.
+        prompt_type_models: Dict {model_key: [pt_key, ...]} pour
+            le comparatif de type de prompt. Si None, pas de comparatif.
         progress_callback: Callback(progress, message).
 
     Returns:
@@ -843,7 +865,8 @@ def run_all_ai_benchmarks(
         compatible = get_compatible_models(ram_total)
         model_keys = list(compatible.keys())
 
-    if not model_keys and not quantization_models:
+    if not model_keys and not quantization_models and not temperature_models \
+       and not language_models and not prompt_type_models:
         return {
             "type": "ai_benchmarks",
             "status": "skipped",
@@ -853,7 +876,10 @@ def run_all_ai_benchmarks(
     # Calculer le nombre total de tâches pour la progression
     n_model_tasks = len(model_keys) if model_keys else 0
     n_quant_tasks = sum(len(qs) for qs in (quantization_models or {}).values())
-    total_tasks = n_model_tasks + n_quant_tasks
+    n_temp_tasks = len(temperature_models or {})
+    n_lang_tasks = len(language_models or {})
+    n_pt_tasks = len(prompt_type_models or {})
+    total_tasks = n_model_tasks + n_quant_tasks + n_temp_tasks + n_lang_tasks + n_pt_tasks
     if total_tasks == 0:
         total_tasks = 1
 
@@ -911,6 +937,84 @@ def run_all_ai_benchmarks(
             )
             task_offset += n_q
 
+    # ── Benchmarks comparatifs : température ──
+    temp_comparison = {}
+    if temperature_models:
+        task_offset = n_model_tasks + n_quant_tasks
+        for model_key, temp_keys in temperature_models.items():
+            def temp_progress(p, msg, _offset=task_offset):
+                if progress_callback:
+                    overall = (_offset + p) / total_tasks
+                    progress_callback(min(overall, 1.0), msg)
+
+            if progress_callback:
+                progress_callback(
+                    task_offset / total_tasks,
+                    f"Comparaison température : "
+                    f"{AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)}",
+                )
+
+            system_cleanup(f"avant comparaison température ({model_key})")
+
+            temp_comparison[model_key] = run_temperature_comparison(
+                model_key,
+                temp_keys,
+                progress_callback=temp_progress,
+            )
+            task_offset += 1
+
+    # ── Benchmarks comparatifs : langue ──
+    lang_comparison = {}
+    if language_models:
+        task_offset = n_model_tasks + n_quant_tasks + n_temp_tasks
+        for model_key, lang_keys in language_models.items():
+            def lang_progress(p, msg, _offset=task_offset):
+                if progress_callback:
+                    overall = (_offset + p) / total_tasks
+                    progress_callback(min(overall, 1.0), msg)
+
+            if progress_callback:
+                progress_callback(
+                    task_offset / total_tasks,
+                    f"Comparaison langues : "
+                    f"{AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)}",
+                )
+
+            system_cleanup(f"avant comparaison langues ({model_key})")
+
+            lang_comparison[model_key] = run_language_comparison(
+                model_key,
+                lang_keys,
+                progress_callback=lang_progress,
+            )
+            task_offset += 1
+
+    # ── Benchmarks comparatifs : type de prompt ──
+    pt_comparison = {}
+    if prompt_type_models:
+        task_offset = n_model_tasks + n_quant_tasks + n_temp_tasks + n_lang_tasks
+        for model_key, pt_keys in prompt_type_models.items():
+            def pt_progress(p, msg, _offset=task_offset):
+                if progress_callback:
+                    overall = (_offset + p) / total_tasks
+                    progress_callback(min(overall, 1.0), msg)
+
+            if progress_callback:
+                progress_callback(
+                    task_offset / total_tasks,
+                    f"Comparaison types de prompt : "
+                    f"{AVAILABLE_MODELS.get(model_key, {}).get('name', model_key)}",
+                )
+
+            system_cleanup(f"avant comparaison types de prompt ({model_key})")
+
+            pt_comparison[model_key] = run_prompt_type_comparison(
+                model_key,
+                pt_keys,
+                progress_callback=pt_progress,
+            )
+            task_offset += 1
+
     elapsed_total = time.time() - start_time
 
     result = {
@@ -924,6 +1028,499 @@ def run_all_ai_benchmarks(
 
     if quant_comparison:
         result["quantization_comparison"] = quant_comparison
+    if temp_comparison:
+        result["temperature_comparison"] = temp_comparison
+    if lang_comparison:
+        result["language_comparison"] = lang_comparison
+    if pt_comparison:
+        result["prompt_type_comparison"] = pt_comparison
+
+    return result
+
+
+# =============================================================================
+# Benchmark comparatif : Impact de la température
+# =============================================================================
+
+def _run_axis_benchmark_runs(
+    model,
+    n_runs: int,
+    prompt: str = BENCHMARK_PROMPT,
+    temperature: float = None,
+    progress_callback: Optional[Callable] = None,
+    progress_base: float = 0.0,
+    progress_span: float = 1.0,
+    label: str = "",
+) -> Dict[str, Any]:
+    """
+    Exécute n_runs d'inférence avec les paramètres donnés et agrège les résultats.
+    Fonction utilitaire partagée par les 3 axes d'analyse.
+
+    Args:
+        model: Modèle Llama chargé.
+        n_runs: Nombre de runs de benchmark.
+        prompt: Prompt à utiliser.
+        temperature: Température (None = défaut config).
+        progress_callback: Callback(progress, message).
+        progress_base: Progression de base (0-1).
+        progress_span: Plage de progression pour cette série de runs.
+        label: Label pour les messages de progression.
+
+    Returns:
+        Dict avec runs individuels + summary agrégé.
+    """
+    runs = []
+    monitor = ResourceMonitor()
+    monitor.start()
+
+    for i in range(n_runs):
+        if progress_callback:
+            p = progress_base + ((i / n_runs) * progress_span)
+            progress_callback(p, f"{label} — Run {i+1}/{n_runs}")
+
+        run_result = run_single_inference(
+            model,
+            prompt=prompt,
+            temperature=temperature,
+        )
+        runs.append(run_result)
+
+    resource_usage = monitor.stop()
+
+    # Agrégation
+    successful_runs = [r for r in runs if r["success"]]
+    summary = {}
+    if successful_runs:
+        tps_values = [r["tokens_per_second"] for r in successful_runs]
+        ftl_values = [
+            r["first_token_latency_s"] for r in successful_runs
+            if r["first_token_latency_s"] is not None
+        ]
+        itl_values = [
+            r["avg_inter_token_latency_ms"] for r in successful_runs
+            if "avg_inter_token_latency_ms" in r
+        ]
+
+        summary = {
+            "n_successful_runs": len(successful_runs),
+            "n_total_runs": n_runs,
+            "avg_tokens_per_second": round(np.mean(tps_values), 2),
+            "std_tokens_per_second": round(np.std(tps_values), 2),
+            "avg_first_token_latency_s": round(np.mean(ftl_values), 4) if ftl_values else None,
+            "avg_inter_token_latency_ms": round(np.mean(itl_values), 2) if itl_values else None,
+            "avg_total_time_s": round(
+                np.mean([r["total_time_s"] for r in successful_runs]), 4
+            ),
+            "peak_memory_gb": round(
+                max(r["memory_after_gb"] for r in successful_runs), 3
+            ),
+            "stability": "stable" if len(successful_runs) == n_runs else "unstable",
+        }
+
+    return {
+        "runs": runs,
+        "summary": summary,
+        "resource_usage": resource_usage,
+    }
+
+
+def run_temperature_comparison(
+    model_key: str,
+    temperature_keys: List[str] = None,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Compare les performances d'un modèle à différentes températures.
+    Le modèle est chargé une seule fois puis testé à chaque température.
+
+    Args:
+        model_key: Clé du modèle.
+        temperature_keys: Liste des clés de température (ex: ["low", "medium", "high"]).
+            Si None, toutes les températures sont testées.
+        progress_callback: Callback(progress, message).
+
+    Returns:
+        Dict structuré avec résultats par température et tableau comparatif.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        return {"error": f"Modèle inconnu : {model_key}"}
+
+    if temperature_keys is None:
+        temperature_keys = list(TEMPERATURE_VARIANTS.keys())
+
+    model_config = AVAILABLE_MODELS[model_key]
+    n_temps = len(temperature_keys)
+
+    # Nettoyage
+    if progress_callback:
+        progress_callback(0.01, f"Nettoyage avant test température {model_config['name']}...")
+    system_cleanup(f"Temperature {model_config['name']}")
+
+    # Vérifier RAM
+    ram_total = psutil.virtual_memory().total / (1024**3)
+    if ram_total < model_config["min_ram_gb"]:
+        return {
+            "model_name": model_config["name"],
+            "status": "skipped",
+            "reason": f"RAM insuffisante ({ram_total:.1f} Go, {model_config['min_ram_gb']} Go requis)",
+        }
+
+    result = {
+        "axis": "temperature",
+        "model_name": model_config["name"],
+        "model_key": model_key,
+        "params": model_config["params"],
+        "variants_tested": temperature_keys,
+        "status": "running",
+        "results": {},
+    }
+
+    try:
+        # Télécharger et charger le modèle une seule fois
+        if progress_callback:
+            progress_callback(0.05, f"Vérification {model_config['name']}...")
+        model_path = download_model(model_key)
+
+        backend_info = detect_best_backend()
+        result["backend"] = backend_info
+
+        if progress_callback:
+            progress_callback(0.10, f"Chargement {model_config['name']}...")
+        model = _load_model(model_path, backend_info, n_ctx=INFERENCE_CONFIG["n_ctx"])
+
+        # Échauffement
+        if progress_callback:
+            progress_callback(0.15, f"Échauffement {model_config['name']}...")
+        for _ in range(INFERENCE_CONFIG["n_warmup_runs"]):
+            run_single_inference(model, max_tokens=32)
+
+        # Tester chaque température
+        n_runs = INFERENCE_CONFIG["n_benchmark_runs"]
+        for idx, temp_key in enumerate(temperature_keys):
+            temp_config = TEMPERATURE_VARIANTS[temp_key]
+            temp_value = temp_config["value"]
+            label = f"Température {temp_config['label']}"
+
+            progress_base = 0.20 + (idx / n_temps) * 0.75
+            progress_span = 0.75 / n_temps
+
+            axis_result = _run_axis_benchmark_runs(
+                model, n_runs,
+                temperature=temp_value,
+                progress_callback=progress_callback,
+                progress_base=progress_base,
+                progress_span=progress_span,
+                label=label,
+            )
+
+            result["results"][temp_key] = {
+                "temperature": temp_value,
+                "label": temp_config["label"],
+                **axis_result,
+            }
+
+        result["status"] = "completed"
+
+        # Tableau comparatif
+        comparison_table = []
+        for tk in temperature_keys:
+            tr = result["results"].get(tk, {})
+            summary = tr.get("summary", {})
+            if summary:
+                comparison_table.append({
+                    "temperature_key": tk,
+                    "temperature": tr.get("temperature", 0),
+                    "label": tr.get("label", tk),
+                    "tokens_per_second": summary.get("avg_tokens_per_second", 0),
+                    "first_token_latency_s": summary.get("avg_first_token_latency_s", 0),
+                    "inter_token_latency_ms": summary.get("avg_inter_token_latency_ms", 0),
+                    "peak_memory_gb": summary.get("peak_memory_gb", 0),
+                    "stability": summary.get("stability", "unknown"),
+                })
+        result["comparison_table"] = comparison_table
+
+        # Nettoyage
+        del model
+        gc.collect()
+
+        if progress_callback:
+            progress_callback(1.0, f"Test température {model_config['name']} terminé.")
+
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+        if progress_callback:
+            progress_callback(1.0, f"Erreur : {e}")
+
+    return result
+
+
+# =============================================================================
+# Benchmark comparatif : Impact de la langue
+# =============================================================================
+
+def run_language_comparison(
+    model_key: str,
+    language_keys: List[str] = None,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Compare les performances d'un modèle selon la langue du prompt.
+    Le modèle est chargé une seule fois puis testé avec chaque langue.
+
+    Args:
+        model_key: Clé du modèle.
+        language_keys: Liste des codes de langue (ex: ["en", "fr", "zh"]).
+            Si None, toutes les langues sont testées.
+        progress_callback: Callback(progress, message).
+
+    Returns:
+        Dict structuré avec résultats par langue et tableau comparatif.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        return {"error": f"Modèle inconnu : {model_key}"}
+
+    if language_keys is None:
+        language_keys = list(LANGUAGE_PROMPTS.keys())
+
+    model_config = AVAILABLE_MODELS[model_key]
+    n_langs = len(language_keys)
+
+    # Nettoyage
+    if progress_callback:
+        progress_callback(0.01, f"Nettoyage avant test langues {model_config['name']}...")
+    system_cleanup(f"Language {model_config['name']}")
+
+    # Vérifier RAM
+    ram_total = psutil.virtual_memory().total / (1024**3)
+    if ram_total < model_config["min_ram_gb"]:
+        return {
+            "model_name": model_config["name"],
+            "status": "skipped",
+            "reason": f"RAM insuffisante ({ram_total:.1f} Go, {model_config['min_ram_gb']} Go requis)",
+        }
+
+    result = {
+        "axis": "language",
+        "model_name": model_config["name"],
+        "model_key": model_key,
+        "params": model_config["params"],
+        "variants_tested": language_keys,
+        "status": "running",
+        "results": {},
+    }
+
+    try:
+        # Charger le modèle une seule fois
+        if progress_callback:
+            progress_callback(0.05, f"Vérification {model_config['name']}...")
+        model_path = download_model(model_key)
+
+        backend_info = detect_best_backend()
+        result["backend"] = backend_info
+
+        if progress_callback:
+            progress_callback(0.10, f"Chargement {model_config['name']}...")
+        model = _load_model(model_path, backend_info, n_ctx=INFERENCE_CONFIG["n_ctx"])
+
+        # Échauffement
+        if progress_callback:
+            progress_callback(0.15, f"Échauffement {model_config['name']}...")
+        for _ in range(INFERENCE_CONFIG["n_warmup_runs"]):
+            run_single_inference(model, max_tokens=32)
+
+        # Tester chaque langue
+        n_runs = INFERENCE_CONFIG["n_benchmark_runs"]
+        for idx, lang_key in enumerate(language_keys):
+            lang_config = LANGUAGE_PROMPTS[lang_key]
+            label = f"{lang_config['flag']} {lang_config['label']}"
+
+            progress_base = 0.20 + (idx / n_langs) * 0.75
+            progress_span = 0.75 / n_langs
+
+            axis_result = _run_axis_benchmark_runs(
+                model, n_runs,
+                prompt=lang_config["prompt"],
+                progress_callback=progress_callback,
+                progress_base=progress_base,
+                progress_span=progress_span,
+                label=label,
+            )
+
+            result["results"][lang_key] = {
+                "language": lang_key,
+                "label": lang_config["label"],
+                "flag": lang_config["flag"],
+                **axis_result,
+            }
+
+        result["status"] = "completed"
+
+        # Tableau comparatif
+        comparison_table = []
+        for lk in language_keys:
+            lr = result["results"].get(lk, {})
+            summary = lr.get("summary", {})
+            if summary:
+                comparison_table.append({
+                    "language_key": lk,
+                    "label": lr.get("label", lk),
+                    "flag": lr.get("flag", ""),
+                    "tokens_per_second": summary.get("avg_tokens_per_second", 0),
+                    "first_token_latency_s": summary.get("avg_first_token_latency_s", 0),
+                    "inter_token_latency_ms": summary.get("avg_inter_token_latency_ms", 0),
+                    "peak_memory_gb": summary.get("peak_memory_gb", 0),
+                    "stability": summary.get("stability", "unknown"),
+                })
+        result["comparison_table"] = comparison_table
+
+        # Nettoyage
+        del model
+        gc.collect()
+
+        if progress_callback:
+            progress_callback(1.0, f"Test langues {model_config['name']} terminé.")
+
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+        if progress_callback:
+            progress_callback(1.0, f"Erreur : {e}")
+
+    return result
+
+
+# =============================================================================
+# Benchmark comparatif : Impact du type de prompt
+# =============================================================================
+
+def run_prompt_type_comparison(
+    model_key: str,
+    prompt_type_keys: List[str] = None,
+    progress_callback: Optional[Callable] = None,
+) -> Dict[str, Any]:
+    """
+    Compare les performances d'un modèle selon le type de prompt.
+    Le modèle est chargé une seule fois puis testé avec chaque type.
+
+    Args:
+        model_key: Clé du modèle.
+        prompt_type_keys: Liste des clés de type (ex: ["code", "reasoning"]).
+            Si None, tous les types sont testés.
+        progress_callback: Callback(progress, message).
+
+    Returns:
+        Dict structuré avec résultats par type de prompt et tableau comparatif.
+    """
+    if model_key not in AVAILABLE_MODELS:
+        return {"error": f"Modèle inconnu : {model_key}"}
+
+    if prompt_type_keys is None:
+        prompt_type_keys = list(PROMPT_TYPE_VARIANTS.keys())
+
+    model_config = AVAILABLE_MODELS[model_key]
+    n_types = len(prompt_type_keys)
+
+    # Nettoyage
+    if progress_callback:
+        progress_callback(0.01, f"Nettoyage avant test types de prompt {model_config['name']}...")
+    system_cleanup(f"PromptType {model_config['name']}")
+
+    # Vérifier RAM
+    ram_total = psutil.virtual_memory().total / (1024**3)
+    if ram_total < model_config["min_ram_gb"]:
+        return {
+            "model_name": model_config["name"],
+            "status": "skipped",
+            "reason": f"RAM insuffisante ({ram_total:.1f} Go, {model_config['min_ram_gb']} Go requis)",
+        }
+
+    result = {
+        "axis": "prompt_type",
+        "model_name": model_config["name"],
+        "model_key": model_key,
+        "params": model_config["params"],
+        "variants_tested": prompt_type_keys,
+        "status": "running",
+        "results": {},
+    }
+
+    try:
+        # Charger le modèle une seule fois
+        if progress_callback:
+            progress_callback(0.05, f"Vérification {model_config['name']}...")
+        model_path = download_model(model_key)
+
+        backend_info = detect_best_backend()
+        result["backend"] = backend_info
+
+        if progress_callback:
+            progress_callback(0.10, f"Chargement {model_config['name']}...")
+        model = _load_model(model_path, backend_info, n_ctx=INFERENCE_CONFIG["n_ctx"])
+
+        # Échauffement
+        if progress_callback:
+            progress_callback(0.15, f"Échauffement {model_config['name']}...")
+        for _ in range(INFERENCE_CONFIG["n_warmup_runs"]):
+            run_single_inference(model, max_tokens=32)
+
+        # Tester chaque type de prompt
+        n_runs = INFERENCE_CONFIG["n_benchmark_runs"]
+        for idx, pt_key in enumerate(prompt_type_keys):
+            pt_config = PROMPT_TYPE_VARIANTS[pt_key]
+            label = f"{pt_config['icon']} {pt_config['label']}"
+
+            progress_base = 0.20 + (idx / n_types) * 0.75
+            progress_span = 0.75 / n_types
+
+            axis_result = _run_axis_benchmark_runs(
+                model, n_runs,
+                prompt=pt_config["prompt"],
+                progress_callback=progress_callback,
+                progress_base=progress_base,
+                progress_span=progress_span,
+                label=label,
+            )
+
+            result["results"][pt_key] = {
+                "prompt_type": pt_key,
+                "label": pt_config["label"],
+                "icon": pt_config["icon"],
+                **axis_result,
+            }
+
+        result["status"] = "completed"
+
+        # Tableau comparatif
+        comparison_table = []
+        for ptk in prompt_type_keys:
+            ptr = result["results"].get(ptk, {})
+            summary = ptr.get("summary", {})
+            if summary:
+                comparison_table.append({
+                    "prompt_type_key": ptk,
+                    "label": ptr.get("label", ptk),
+                    "icon": ptr.get("icon", ""),
+                    "tokens_per_second": summary.get("avg_tokens_per_second", 0),
+                    "first_token_latency_s": summary.get("avg_first_token_latency_s", 0),
+                    "inter_token_latency_ms": summary.get("avg_inter_token_latency_ms", 0),
+                    "peak_memory_gb": summary.get("peak_memory_gb", 0),
+                    "stability": summary.get("stability", "unknown"),
+                })
+        result["comparison_table"] = comparison_table
+
+        # Nettoyage
+        del model
+        gc.collect()
+
+        if progress_callback:
+            progress_callback(1.0, f"Test types de prompt {model_config['name']} terminé.")
+
+    except Exception as e:
+        result["status"] = "error"
+        result["error"] = str(e)
+        if progress_callback:
+            progress_callback(1.0, f"Erreur : {e}")
 
     return result
 

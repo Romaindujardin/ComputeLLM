@@ -46,7 +46,14 @@ from src.results_manager import (
     compare_results,
     export_to_csv,
 )
-from src.config import AVAILABLE_MODELS, QUANTIZATION_VARIANTS, RESULTS_DIR
+from src.config import (
+    AVAILABLE_MODELS,
+    QUANTIZATION_VARIANTS,
+    RESULTS_DIR,
+    TEMPERATURE_VARIANTS,
+    LANGUAGE_PROMPTS,
+    PROMPT_TYPE_VARIANTS,
+)
 
 # =============================================================================
 # Configuration de la page Streamlit
@@ -427,6 +434,98 @@ def page_benchmark():
     else:
         st.info("Aucun modèle compatible pour la comparaison de quantification.")
 
+    # ─── Axes d'analyse avancés ───
+    st.markdown("---")
+    st.markdown("### Axes d'analyse avancés")
+    st.caption(
+        "Testez l'impact de la température, de la langue et du type de prompt sur les performances d'inférence. "
+        "Le modèle est chargé une seule fois puis testé avec chaque variante (3 runs par variante)."
+    )
+
+    temp_selections = {}   # model_key → [temp_key, ...]
+    lang_selections = {}   # model_key → [lang_key, ...]
+    pt_selections = {}     # model_key → [pt_key, ...]
+
+    # Déterminer les modèles compatibles pour les axes
+    axis_compatible_models = {k: v for k, v in compatible.items()} if compatible else {}
+
+    if axis_compatible_models:
+        for model_key, model_info in axis_compatible_models.items():
+            model_name = model_info["name"]
+            params = model_info["params"]
+
+            with st.expander(f"📊 {model_name} ({params}) — Axes d'analyse", expanded=False):
+
+                # --- Axe Température ---
+                enable_temp = st.checkbox(
+                    f"🌡️ Comparer les températures pour {model_name}",
+                    value=False,
+                    key=f"temp_enable_{model_key}",
+                    help="Teste l'impact de la température (0.25, 0.50, 0.75) sur le débit et la latence",
+                )
+                if enable_temp:
+                    selected_temps = []
+                    temp_cols = st.columns(len(TEMPERATURE_VARIANTS))
+                    for i, (tk, tv) in enumerate(TEMPERATURE_VARIANTS.items()):
+                        with temp_cols[i]:
+                            if st.checkbox(
+                                f"🌡️ {tv['label']}",
+                                value=True,
+                                key=f"temp_{model_key}_{tk}",
+                                help=tv["description"],
+                            ):
+                                selected_temps.append(tk)
+                    if selected_temps:
+                        temp_selections[model_key] = selected_temps
+
+                # --- Axe Langue ---
+                enable_lang = st.checkbox(
+                    f"🌍 Comparer les langues pour {model_name}",
+                    value=False,
+                    key=f"lang_enable_{model_key}",
+                    help="Teste l'impact de la langue du prompt (FR, EN, ZH, ES, DE, AR)",
+                )
+                if enable_lang:
+                    selected_langs = []
+                    lang_cols = st.columns(min(len(LANGUAGE_PROMPTS), 6))
+                    for i, (lk, lv) in enumerate(LANGUAGE_PROMPTS.items()):
+                        col_idx = i % len(lang_cols)
+                        with lang_cols[col_idx]:
+                            default = lk in ("en", "fr", "zh")
+                            if st.checkbox(
+                                f"{lv['flag']} {lv['label']}",
+                                value=default,
+                                key=f"lang_{model_key}_{lk}",
+                            ):
+                                selected_langs.append(lk)
+                    if selected_langs:
+                        lang_selections[model_key] = selected_langs
+
+                # --- Axe Type de prompt ---
+                enable_pt = st.checkbox(
+                    f"📝 Comparer les types de prompt pour {model_name}",
+                    value=False,
+                    key=f"pt_enable_{model_key}",
+                    help="Teste l'impact du type de tâche (code, raisonnement, créatif, maths)",
+                )
+                if enable_pt:
+                    selected_pts = []
+                    pt_cols = st.columns(min(len(PROMPT_TYPE_VARIANTS), 5))
+                    for i, (ptk, ptv) in enumerate(PROMPT_TYPE_VARIANTS.items()):
+                        col_idx = i % len(pt_cols)
+                        with pt_cols[col_idx]:
+                            if st.checkbox(
+                                f"{ptv['icon']} {ptv['label']}",
+                                value=True,
+                                key=f"pt_{model_key}_{ptk}",
+                                help=ptv["description"],
+                            ):
+                                selected_pts.append(ptk)
+                    if selected_pts:
+                        pt_selections[model_key] = selected_pts
+    else:
+        st.info("Aucun modèle compatible pour les axes d'analyse.")
+
     # ─── Mode d'inférence : llama-cpp-python vs llama-server ───
     st.markdown("---")
     st.markdown("### Mode d'inférence")
@@ -535,16 +634,18 @@ def page_benchmark():
     st.markdown("### Résumé")
 
     n_quant_tests = sum(len(qs) for qs in quant_selections.values())
-    n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests
+    n_axis_tests = len(temp_selections) + len(lang_selections) + len(pt_selections)
+    n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests + n_axis_tests
 
     inference_mode_label = "llama-server" if server_mode else "llama-cpp-python"
-    cols = st.columns(6)
+    cols = st.columns(7)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
     cols[1].metric("Mode inférence", inference_mode_label)
     cols[2].metric("Modèles sélectionnés", len(selected_models))
     cols[3].metric("Tests quantification", n_quant_tests)
-    cols[4].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
-    cols[5].metric("Tests total", n_tests)
+    cols[4].metric("Axes d'analyse", n_axis_tests)
+    cols[5].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
+    cols[6].metric("Tests total", n_tests)
 
     st.markdown("---")
 
@@ -598,9 +699,10 @@ def page_benchmark():
             st.info("Benchmarks classiques désactivés.")
 
         # ============================
-        # BENCHMARKS IA (modèles + quantification)
+        # BENCHMARKS IA (modèles + quantification + axes)
         # ============================
-        has_ai_work = bool(selected_models) or bool(quant_selections)
+        has_ai_work = bool(selected_models) or bool(quant_selections) \
+            or bool(temp_selections) or bool(lang_selections) or bool(pt_selections)
 
         if has_ai_work:
             mode_label = "serveur" if server_mode else "llama-cpp-python"
@@ -664,6 +766,9 @@ def page_benchmark():
                         ai_results = run_all_server_benchmarks(
                             model_keys=selected_models if selected_models else [],
                             quantization_models=quant_selections if quant_selections else None,
+                            temperature_models=temp_selections if temp_selections else None,
+                            language_models=lang_selections if lang_selections else None,
+                            prompt_type_models=pt_selections if pt_selections else None,
                             server_manager=srv,
                             progress_callback=ai_callback,
                         )
@@ -672,6 +777,9 @@ def page_benchmark():
                         ai_results = run_all_ai_benchmarks(
                             model_keys=selected_models if selected_models else [],
                             quantization_models=quant_selections if quant_selections else None,
+                            temperature_models=temp_selections if temp_selections else None,
+                            language_models=lang_selections if lang_selections else None,
+                            prompt_type_models=pt_selections if pt_selections else None,
                             progress_callback=ai_callback,
                         )
 
@@ -809,6 +917,30 @@ def page_benchmark():
                                 f"{tps} tok/s",
                                 f"{row.get('file_size_gb', 0):.2f} Go",
                             )
+
+            # Aperçu rapide des axes d'analyse
+            for axis_key, axis_label, axis_icon in [
+                ("temperature_comparison", "température", "🌡️"),
+                ("language_comparison", "langue", "🌍"),
+                ("prompt_type_comparison", "type de prompt", "📝"),
+            ]:
+                axis_comp = st.session_state.ai_results.get(axis_key, {})
+                if axis_comp:
+                    st.markdown(f"#### {axis_icon} Aperçu comparaison {axis_label}")
+                    for model_key, comp_data in axis_comp.items():
+                        model_name = comp_data.get("model_name", model_key)
+                        table = comp_data.get("comparison_table", [])
+                        if table:
+                            n_items = len(table)
+                            cols = st.columns(min(n_items, 6))
+                            for i, row in enumerate(table):
+                                tps = row.get("tokens_per_second", 0)
+                                label_text = row.get("label", row.get("temperature_key", row.get("language_key", row.get("prompt_type_key", "?"))))
+                                icon = row.get("icon", row.get("flag", ""))
+                                cols[i % len(cols)].metric(
+                                    f"{icon} {label_text}",
+                                    f"{tps} tok/s",
+                                )
 
         st.info("Consultez la page **Résultats** pour une analyse détaillée.")
 
@@ -1282,6 +1414,174 @@ def _display_single_result(data: dict, filename: str):
                 fig_itl.update_traces(textposition="outside")
                 fig_itl.update_layout(showlegend=False)
                 st.plotly_chart(fig_itl, use_container_width=True)
+
+    # === Comparaison de Température ===
+    temp_comp = ai.get("temperature_comparison", {})
+    if temp_comp:
+        st.markdown("---")
+        st.markdown("### 🌡️ Impact de la Température")
+
+        for model_key, comp_data in temp_comp.items():
+            model_name = comp_data.get("model_name", model_key)
+            table = comp_data.get("comparison_table", [])
+
+            if not table:
+                st.warning(f"Aucun résultat de température pour {model_name}.")
+                continue
+
+            st.markdown(f"#### {model_name}")
+
+            # Tableau
+            import pandas as pd
+            df_temp = pd.DataFrame([
+                {
+                    "Température": row.get("label", row.get("temperature_key", "")),
+                    "Valeur": row.get("temperature", 0),
+                    "Tokens/s": row.get("tokens_per_second", 0),
+                    "1er token (s)": row.get("first_token_latency_s", 0),
+                    "Latence inter-token (ms)": row.get("inter_token_latency_ms", 0),
+                    "Mémoire pic (Go)": row.get("peak_memory_gb", 0),
+                    "Stabilité": row.get("stability", "?"),
+                }
+                for row in table
+            ])
+            st.dataframe(df_temp, use_container_width=True, hide_index=True)
+
+            # Graphiques
+            labels = [row.get("label", str(row.get("temperature", ""))) for row in table]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                tps_vals = [row.get("tokens_per_second", 0) for row in table]
+                fig = px.bar(x=labels, y=tps_vals,
+                    labels={"x": "Température", "y": "Tokens/s"},
+                    title=f"{model_name} — Tokens/s par température",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Set2,
+                    text=[f"{v:.1f}" for v in tps_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                itl_vals = [row.get("inter_token_latency_ms", 0) for row in table]
+                fig = px.bar(x=labels, y=itl_vals,
+                    labels={"x": "Température", "y": "Latence (ms)"},
+                    title=f"{model_name} — Latence inter-token par température",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Pastel,
+                    text=[f"{v:.1f}" for v in itl_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+    # === Comparaison de Langue ===
+    lang_comp = ai.get("language_comparison", {})
+    if lang_comp:
+        st.markdown("---")
+        st.markdown("### 🌍 Impact de la Langue")
+
+        for model_key, comp_data in lang_comp.items():
+            model_name = comp_data.get("model_name", model_key)
+            table = comp_data.get("comparison_table", [])
+
+            if not table:
+                st.warning(f"Aucun résultat de langue pour {model_name}.")
+                continue
+
+            st.markdown(f"#### {model_name}")
+
+            import pandas as pd
+            df_lang = pd.DataFrame([
+                {
+                    "Langue": f"{row.get('flag', '')} {row.get('label', row.get('language_key', ''))}",
+                    "Tokens/s": row.get("tokens_per_second", 0),
+                    "1er token (s)": row.get("first_token_latency_s", 0),
+                    "Latence inter-token (ms)": row.get("inter_token_latency_ms", 0),
+                    "Mémoire pic (Go)": row.get("peak_memory_gb", 0),
+                    "Stabilité": row.get("stability", "?"),
+                }
+                for row in table
+            ])
+            st.dataframe(df_lang, use_container_width=True, hide_index=True)
+
+            labels = [f"{row.get('flag', '')} {row.get('label', '')}" for row in table]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                tps_vals = [row.get("tokens_per_second", 0) for row in table]
+                fig = px.bar(x=labels, y=tps_vals,
+                    labels={"x": "Langue", "y": "Tokens/s"},
+                    title=f"{model_name} — Tokens/s par langue",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Bold,
+                    text=[f"{v:.1f}" for v in tps_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                itl_vals = [row.get("inter_token_latency_ms", 0) for row in table]
+                fig = px.bar(x=labels, y=itl_vals,
+                    labels={"x": "Langue", "y": "Latence (ms)"},
+                    title=f"{model_name} — Latence inter-token par langue",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Pastel,
+                    text=[f"{v:.1f}" for v in itl_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+    # === Comparaison de Type de Prompt ===
+    pt_comp = ai.get("prompt_type_comparison", {})
+    if pt_comp:
+        st.markdown("---")
+        st.markdown("### 📝 Impact du Type de Prompt")
+
+        for model_key, comp_data in pt_comp.items():
+            model_name = comp_data.get("model_name", model_key)
+            table = comp_data.get("comparison_table", [])
+
+            if not table:
+                st.warning(f"Aucun résultat de type de prompt pour {model_name}.")
+                continue
+
+            st.markdown(f"#### {model_name}")
+
+            import pandas as pd
+            df_pt = pd.DataFrame([
+                {
+                    "Type": f"{row.get('icon', '')} {row.get('label', row.get('prompt_type_key', ''))}",
+                    "Tokens/s": row.get("tokens_per_second", 0),
+                    "1er token (s)": row.get("first_token_latency_s", 0),
+                    "Latence inter-token (ms)": row.get("inter_token_latency_ms", 0),
+                    "Mémoire pic (Go)": row.get("peak_memory_gb", 0),
+                    "Stabilité": row.get("stability", "?"),
+                }
+                for row in table
+            ])
+            st.dataframe(df_pt, use_container_width=True, hide_index=True)
+
+            labels = [f"{row.get('icon', '')} {row.get('label', '')}" for row in table]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                tps_vals = [row.get("tokens_per_second", 0) for row in table]
+                fig = px.bar(x=labels, y=tps_vals,
+                    labels={"x": "Type de prompt", "y": "Tokens/s"},
+                    title=f"{model_name} — Tokens/s par type de prompt",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Vivid,
+                    text=[f"{v:.1f}" for v in tps_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                itl_vals = [row.get("inter_token_latency_ms", 0) for row in table]
+                fig = px.bar(x=labels, y=itl_vals,
+                    labels={"x": "Type de prompt", "y": "Latence (ms)"},
+                    title=f"{model_name} — Latence inter-token par type de prompt",
+                    color=labels, color_discrete_sequence=px.colors.qualitative.Safe,
+                    text=[f"{v:.1f}" for v in itl_vals])
+                fig.update_traces(textposition="outside")
+                fig.update_layout(showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
 
     # JSON brut
     with st.expander("Données brutes (JSON)"):

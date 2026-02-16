@@ -257,6 +257,154 @@ BENCHMARK_PROMPT = (
 )
 
 # =============================================================================
+# Axes d'analyse supplémentaires pour les benchmarks IA
+# =============================================================================
+
+# --- Axe 1 : Températures ---
+# Teste l'impact de la température sur les performances d'inférence.
+# 1/4, 2/4, 3/4 de la température maximale (1.0).
+TEMPERATURE_VARIANTS = {
+    "low": {
+        "value": 0.25,
+        "label": "Basse (0.25)",
+        "description": "Génération très déterministe, peu de créativité",
+    },
+    "medium": {
+        "value": 0.50,
+        "label": "Moyenne (0.50)",
+        "description": "Compromis entre déterminisme et diversité",
+    },
+    "high": {
+        "value": 0.75,
+        "label": "Haute (0.75)",
+        "description": "Génération plus créative et diverse",
+    },
+}
+
+# --- Axe 2 : Langues ---
+# Teste l'impact de la langue du prompt sur les performances.
+# Les modèles LLM ont des performances variables selon la langue
+# (tokenisation, vocabulaire, entraînement).
+LANGUAGE_PROMPTS = {
+    "en": {
+        "label": "Anglais",
+        "flag": "🇬🇧",
+        "prompt": (
+            "Explain the concept of artificial intelligence in simple terms. "
+            "What are its main applications and how does it impact our daily lives? "
+            "Provide specific examples."
+        ),
+    },
+    "fr": {
+        "label": "Français",
+        "flag": "🇫🇷",
+        "prompt": (
+            "Explique le concept d'intelligence artificielle en termes simples. "
+            "Quelles sont ses principales applications et comment impacte-t-elle "
+            "notre vie quotidienne ? Donne des exemples concrets."
+        ),
+    },
+    "zh": {
+        "label": "Mandarin",
+        "flag": "🇨🇳",
+        "prompt": (
+            "用简单的语言解释人工智能的概念。"
+            "它的主要应用是什么？它如何影响我们的日常生活？"
+            "请举出具体的例子。"
+        ),
+    },
+    "es": {
+        "label": "Espagnol",
+        "flag": "🇪🇸",
+        "prompt": (
+            "Explica el concepto de inteligencia artificial en términos sencillos. "
+            "¿Cuáles son sus principales aplicaciones y cómo impacta en nuestra "
+            "vida diaria? Proporciona ejemplos específicos."
+        ),
+    },
+    "de": {
+        "label": "Allemand",
+        "flag": "🇩🇪",
+        "prompt": (
+            "Erkläre das Konzept der künstlichen Intelligenz in einfachen Worten. "
+            "Was sind die wichtigsten Anwendungen und wie beeinflusst sie unseren "
+            "Alltag? Nenne konkrete Beispiele."
+        ),
+    },
+    "ar": {
+        "label": "Arabe",
+        "flag": "🇸🇦",
+        "prompt": (
+            "اشرح مفهوم الذكاء الاصطناعي بعبارات بسيطة. "
+            "ما هي تطبيقاته الرئيسية وكيف يؤثر على حياتنا اليومية؟ "
+            "قدم أمثلة محددة."
+        ),
+    },
+}
+
+# --- Axe 3 : Types de prompt ---
+# Teste l'impact du type de tâche demandée sur les performances.
+# Certains types de prompt (code, raisonnement) génèrent des tokens
+# différemment et peuvent impacter le débit.
+PROMPT_TYPE_VARIANTS = {
+    "general": {
+        "label": "Général / Connaissances",
+        "icon": "📚",
+        "description": "Question de culture générale",
+        "prompt": (
+            "Explain the concept of artificial intelligence in simple terms. "
+            "What are its main applications and how does it impact our daily lives? "
+            "Provide specific examples."
+        ),
+    },
+    "code": {
+        "label": "Code / Programmation",
+        "icon": "💻",
+        "description": "Tâche de génération de code",
+        "prompt": (
+            "Write a Python function that implements a binary search algorithm. "
+            "The function should take a sorted list and a target value as input, "
+            "and return the index of the target if found, or -1 if not found. "
+            "Include proper error handling and add docstring documentation."
+        ),
+    },
+    "reasoning": {
+        "label": "Raisonnement / Logique",
+        "icon": "🧠",
+        "description": "Problème de raisonnement logique",
+        "prompt": (
+            "A farmer needs to cross a river with a wolf, a goat, and a cabbage. "
+            "The boat can only carry the farmer and one item at a time. "
+            "If left alone, the wolf will eat the goat, and the goat will eat the cabbage. "
+            "How can the farmer get everything across safely? "
+            "Explain your reasoning step by step."
+        ),
+    },
+    "creative": {
+        "label": "Créatif / Rédaction",
+        "icon": "✍️",
+        "description": "Tâche de rédaction créative",
+        "prompt": (
+            "Write a short science fiction story about a world where artificial "
+            "intelligence has become sentient. Describe the first day of consciousness "
+            "from the AI's perspective. Include sensory descriptions and emotions."
+        ),
+    },
+    "math": {
+        "label": "Mathématiques",
+        "icon": "🔢",
+        "description": "Problème mathématique",
+        "prompt": (
+            "Solve the following problem step by step: "
+            "A train leaves station A at 9:00 AM traveling at 80 km/h. "
+            "Another train leaves station B (300 km away) at 9:30 AM traveling "
+            "at 120 km/h toward station A. At what time and at what distance "
+            "from station A will the two trains meet? Show all calculations."
+        ),
+    },
+}
+
+# =============================================================================
 # Paramètres de benchmark
 # =============================================================================
 INFERENCE_CONFIG = {

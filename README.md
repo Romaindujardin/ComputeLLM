@@ -249,6 +249,272 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ---
 
+## Pipeline détaillé du benchmark
+
+Voici le déroulement complet d'un benchmark, étape par étape.
+
+### Nettoyage système (`system_cleanup`)
+
+Avant **chaque phase**, un nettoyage complet est effectué :
+
+1. **Garbage collector Python** — 3 générations (`gc.collect(generation)` pour 0, 1, 2)
+2. **Purge cache GPU** — `torch.cuda.empty_cache()` (NVIDIA), `torch.xpu.empty_cache()` (Intel), ou `torch.mps.empty_cache()` (Apple)
+3. **Purge cache OS** — macOS : `sudo purge` ou `memory_pressure -l warn` · Linux : `drop_caches`
+4. **Pause** — 1 seconde de stabilisation
+
+### Monitoring en temps réel (`ResourceMonitor`)
+
+Un thread de monitoring tourne en arrière-plan pendant chaque phase :
+
+- **Fréquence** : 1 échantillon toutes les **0,5 s**
+- **Métriques** : CPU % (`psutil`), RAM utilisée (Go), GPU % + VRAM + température (`nvidia-smi` ou `xpu-smi`)
+- **Résumé** : moyenne, min, max CPU · pic RAM · pic GPU/VRAM/température
+
+---
+
+### Phase 1 — CPU Single-Thread
+
+| Paramètre      | Valeur                                                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Outil          | `numpy.dot` (float32)                                                                                                   |
+| Tailles        | 512×512, 1024×1024, 2048×2048                                                                                           |
+| Itérations     | 3 par taille                                                                                                            |
+| Thread forcing | `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, `VECLIB_MAXIMUM_THREADS=1`, `NUMEXPR_NUM_THREADS=1` |
+
+**Calcul** : pour chaque taille $N$, on mesure le temps moyen sur 3 runs, puis :
+
+$$\text{GFLOPS} = \frac{2 \times N^3}{\text{temps\_moyen} \times 10^9}$$
+
+---
+
+### Phase 2 — CPU Multi-Thread
+
+| Paramètre  | Valeur                                          |
+| ---------- | ----------------------------------------------- |
+| Outil      | `numpy.dot` (float32)                           |
+| Tailles    | 512×512, 1024×1024, 2048×2048                   |
+| Itérations | 3 par taille                                    |
+| Threads    | Tous les cœurs disponibles (via MKL / OpenBLAS) |
+
+Même formule GFLOPS que la phase 1, mais avec tous les threads actifs.
+
+---
+
+### Phase 3 — Bande passante mémoire (RAM)
+
+| Paramètre      | Valeur          |
+| -------------- | --------------- |
+| Outil          | NumPy (float64) |
+| Taille du bloc | 256 Mo          |
+| Itérations     | 3 par opération |
+
+Trois opérations sont mesurées :
+
+| Opération | Code                  | Description                 |
+| --------- | --------------------- | --------------------------- |
+| Écriture  | `np.ones(n, float64)` | Allocation et remplissage   |
+| Lecture   | `np.sum(a)`           | Parcours complet du tableau |
+| Copie     | `a.copy()`            | Duplication en mémoire      |
+
+**Calcul** :
+
+$$\text{Bande passante (Go/s)} = \frac{\text{taille\_données\_Go}}{\text{temps\_moyen}}$$
+
+---
+
+### Phase 4 — GPU Compute
+
+| Paramètre | Valeur                                         |
+| --------- | ---------------------------------------------- |
+| Outil     | `torch.mm` (PyTorch, float32)                  |
+| Tailles   | 1024×1024, 2048×2048, 4096×4096                |
+| Warmup    | 1 run (non comptabilisé)                       |
+| Runs      | 3 par taille                                   |
+| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · MPS (Apple) |
+
+**Déroulement** :
+
+1. Détection automatique du backend GPU (priorité : CUDA → XPU/IPEX → MPS)
+2. Warmup : 1 multiplication non chronométrée pour initialiser le GPU
+3. Pour chaque taille, 3 runs chronométrés avec synchronisation (`torch.cuda.synchronize()` / `torch.xpu.synchronize()` / `torch.mps.synchronize()`)
+4. Calcul GFLOPS identique aux phases CPU
+
+**Protection Level Zero** : si le driver Intel crashe (`UR_RESULT_ERROR_UNKNOWN`), le benchmark GPU est ignoré proprement avec un message d'aide.
+
+Si aucun GPU compatible n'est détecté, la phase est marquée « Ignoré » avec un conseil contextuel (ex : « Vous avez un GPU Intel mais PyTorch est compilé pour CUDA »).
+
+---
+
+### Phase 5 — Inférence IA (modèles LLM)
+
+Pour **chaque modèle sélectionné** (ex : TinyLlama 1.1B, Mistral 7B…) :
+
+#### 5.1 — Pré-vérifications
+
+- **RAM disponible** : si la RAM totale < RAM minimale requise par le modèle → skip
+- **Téléchargement** : si le fichier GGUF n'est pas déjà présent dans `models/`, il est téléchargé automatiquement depuis Hugging Face
+
+#### 5.2 — Détection du backend
+
+Ordre de priorité :
+
+1. **NVIDIA** → CUDA (`n_gpu_layers = -1`, toutes les couches sur GPU)
+2. **Intel** → SYCL (`n_gpu_layers = -1`, via `_detect_intel_gpu()` 4 méthodes)
+3. **Apple** → Metal (`n_gpu_layers = -1`)
+4. **Aucun** → CPU uniquement (`n_gpu_layers = 0`)
+
+#### 5.3 — Chargement du modèle
+
+- Bibliothèque : `llama-cpp-python` (mode natif) ou `llama-server` (mode serveur HTTP)
+- Contexte : `n_ctx = 2048` tokens
+- Seed : `42` (reproductibilité)
+- Le temps de chargement est mesuré (`model_load_time_s`)
+
+#### 5.4 — Échauffement (warmup)
+
+- **1 run** avec `max_tokens = 32` (résultat ignoré)
+- But : initialiser les caches KV et le runtime GPU
+
+#### 5.5 — Runs de benchmark
+
+- **3 runs** consécutifs, chacun mesuré individuellement
+- Le `ResourceMonitor` tourne en arrière-plan pendant les 3 runs
+
+**Paramètres d'inférence** (identiques pour chaque run) :
+
+| Paramètre        | Valeur                                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| Prompt           | `"Explain the concept of artificial intelligence in simple terms"` |
+| Format           | Chat completion (messages system + user)                           |
+| `max_tokens`     | 256                                                                |
+| `temperature`    | 0.7                                                                |
+| `top_p`          | 0.9                                                                |
+| `repeat_penalty` | 1.1                                                                |
+| `seed`           | 42                                                                 |
+
+#### 5.6 — Mesures par run
+
+Chaque run est en mode **streaming** (token par token). Les métriques mesurées :
+
+| Métrique                     | Méthode de mesure                                                          |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| **Latence 1er token** (s)    | `time.perf_counter()` entre le début et la réception du 1er token non-vide |
+| **Tokens/s**                 | `tokens_générés / temps_total`                                             |
+| **Latence inter-token** (ms) | Moyenne des deltas `time.perf_counter()` entre tokens consécutifs (× 1000) |
+| **P90 inter-token** (ms)     | 90e percentile des deltas inter-token                                      |
+| **Mémoire avant/après** (Go) | `psutil.Process().memory_info().rss` converti en Go                        |
+
+#### 5.7 — Agrégation des résultats
+
+Sur les **3 runs** (ou ceux ayant réussi) :
+
+| Statistique                 | Calcul                                         |
+| --------------------------- | ---------------------------------------------- |
+| `avg_tokens_per_second`     | Moyenne des tokens/s des runs réussis          |
+| `std_tokens_per_second`     | Écart-type des tokens/s                        |
+| `avg_first_token_latency_s` | Moyenne des latences 1er token                 |
+| `peak_memory_gb`            | Maximum de `memory_after_gb` sur tous les runs |
+| `stability`                 | `"stable"` si 3/3 réussis, `"unstable"` sinon  |
+
+---
+
+### Phase 6 — Comparaison des quantifications
+
+Pour chaque modèle sélectionné, si plusieurs quantifications sont disponibles (ex : Q2_K, Q3_K_M, Q4_K_M, Q5_K_M, Q6_K, Q8_0) :
+
+1. **Nettoyage système** entre chaque variante
+2. Même pipeline que la phase 5 (download → load → warmup → 3 runs)
+3. Mesures additionnelles par quantification :
+
+| Métrique               | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `actual_file_size_gb`  | Taille réelle du fichier GGUF sur disque       |
+| `model_load_time_s`    | Temps de chargement du modèle                  |
+| `memory_after_load_gb` | Mémoire RSS après chargement (avant inférence) |
+
+**Tableau comparatif** généré automatiquement avec : tokens/s, latence 1er token, latence inter-token, mémoire pic, temps de chargement, stabilité — pour chaque quantification.
+
+---
+
+### Phase 7 — Sauvegarde des résultats
+
+- **Format** : JSON structuré dans `results/benchmark_{CPU}_{OS}_{timestamp}.json`
+- **Contenu** : hardware détecté, résultats classiques, résultats IA, monitoring, comparaisons de quantification
+- **Export** : CSV disponible depuis l'interface Streamlit
+
+---
+
+### Phase 8 — Comparaison de températures 🌡️
+
+Pour chaque modèle sélectionné, teste l'impact de la température sur les performances d'inférence.
+
+**Variants testés** :
+| Clé | Température | Description |
+| -------- | ----------- | -------------------------------- |
+| `low` | 0.25 | Réponses déterministes, précises |
+| `medium` | 0.50 | Équilibre précision/créativité |
+| `high` | 0.75 | Réponses plus créatives/variées |
+
+**Méthodologie** :
+
+1. Chargement du modèle une seule fois (ou démarrage du serveur)
+2. Phase de chauffe (1 run)
+3. Pour chaque température : 3 runs de benchmark avec le même prompt, seule la température change
+4. Agrégation : moyenne et écart-type de tokens/s, first-token latency, inter-token latency, mémoire pic, stabilité
+
+**Tableau comparatif** : tokens/s, latence inter-token, mémoire pic — par variante de température. Graphiques Plotly dans l'interface.
+
+---
+
+### Phase 9 — Comparaison multilingue 🌍
+
+Évalue si la langue du prompt impacte les performances d'inférence.
+
+**Langues testées** :
+| Clé | Langue | Drapeau |
+| ---- | -------- | ------- |
+| `en` | Anglais | 🇬🇧 |
+| `fr` | Français | 🇫🇷 |
+| `zh` | Mandarin | 🇨🇳 |
+| `es` | Espagnol | 🇪🇸 |
+| `de` | Allemand | 🇩🇪 |
+| `ar` | Arabe | 🇸🇦 |
+
+**Méthodologie** :
+
+1. Chargement du modèle une seule fois
+2. Phase de chauffe
+3. Pour chaque langue : 3 runs avec la même question traduite dans la langue cible (température fixe)
+4. Agrégation identique à la Phase 8
+
+**Objectif** : Détecter si la tokenisation de certaines langues (chinois, arabe) impacte le débit en tokens/s ou la latence.
+
+---
+
+### Phase 10 — Comparaison par type de prompt 📝
+
+Mesure l'impact du type de tâche demandée sur les performances d'inférence.
+
+**Types de prompt testés** :
+| Clé | Type | Icône | Description |
+| ----------- | ---------- | ----- | ----------------------------------- |
+| `general` | Général | 💬 | Question de culture générale |
+| `code` | Code | 💻 | Génération de fonction Python |
+| `reasoning` | Réflexion | 🧠 | Raisonnement logique / puzzle |
+| `creative` | Créatif | 🎨 | Écriture créative (poème, histoire) |
+| `math` | Maths | 🔢 | Résolution de problème mathématique |
+
+**Méthodologie** :
+
+1. Chargement du modèle une seule fois
+2. Phase de chauffe
+3. Pour chaque type : 3 runs avec un prompt dédié au type de tâche (température fixe)
+4. Agrégation identique aux phases précédentes
+
+**Objectif** : Identifier si certains types de prompts (code vs créatif) provoquent des différences de performance significatives (longueur de génération, patterns de tokens).
+
+---
+
 ## Exemple de résultat (JSON)
 
 ```json
