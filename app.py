@@ -766,6 +766,8 @@ def page_benchmark():
                 if gpu_res:
                     largest = list(gpu_res.values())[-1]
                     cols[3].metric("GPU", f"{largest.get('gflops', 0)} GFLOPS")
+            elif gpu.get("status") == "skipped":
+                cols[3].metric("GPU", "Ignoré ⚠️", gpu.get("reason", "")[:60])
             else:
                 cols[3].metric("GPU", gpu.get("reason", "N/A"))
 
@@ -1004,6 +1006,13 @@ def _display_single_result(data: dict, filename: str):
                 color_discrete_sequence=["#FF6B6B"],
             )
             st.plotly_chart(fig, use_container_width=True)
+        elif gpu_bench.get("status") == "skipped":
+            reason = gpu_bench.get("reason", "GPU non disponible")
+            advice = gpu_bench.get("advice", "")
+            warning_msg = f"**GPU Compute** — {reason}"
+            if advice:
+                warning_msg += f"\n\n💡 {advice}"
+            st.warning(warning_msg)
 
         # Utilisation ressources
         resource = data.get("classic_benchmarks", {}).get("resource_usage", {})

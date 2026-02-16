@@ -530,6 +530,10 @@ def benchmark_gpu(
         }
 
     # Déterminer le device
+    device = None
+    device_name = ""
+    backend = ""
+
     if torch.cuda.is_available():
         device = torch.device("cuda")
         device_name = torch.cuda.get_device_name(0)
@@ -541,16 +545,71 @@ def benchmark_gpu(
         except Exception:
             device_name = "Intel GPU (XPU)"
         backend = "SYCL/XPU"
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        device = torch.device("mps")
-        device_name = "Apple Silicon (MPS)"
-        backend = "Metal/MPS"
     else:
-        return {
+        # Tenter d'activer XPU via intel-extension-for-pytorch (IPEX)
+        try:
+            import intel_extension_for_pytorch as ipex  # noqa: F401
+            if hasattr(torch, "xpu") and torch.xpu.is_available():
+                device = torch.device("xpu")
+                try:
+                    device_name = torch.xpu.get_device_name(0)
+                except Exception:
+                    device_name = "Intel GPU (XPU via IPEX)"
+                backend = "SYCL/XPU (IPEX)"
+        except ImportError:
+            pass
+
+    # MPS (Apple Silicon)
+    if device is None:
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            device = torch.device("mps")
+            device_name = "Apple Silicon (MPS)"
+            backend = "Metal/MPS"
+
+    # Aucun backend GPU trouvé — message d'aide contextuel
+    if device is None:
+        reason = "Aucun GPU compatible (CUDA/XPU/MPS) détecté"
+        advice = ""
+
+        # Vérifier si un GPU Intel est physiquement présent
+        try:
+            from src.hardware_detect import _detect_intel_gpu
+            intel_gpu = _detect_intel_gpu()
+            if intel_gpu:
+                gpu_name = intel_gpu.get("name", "Intel GPU")
+                # Vérifier si PyTorch est un build CUDA (inutile sur Intel)
+                torch_version = getattr(torch, "__version__", "")
+                if "+cu" in torch_version or "cuda" in torch_version.lower():
+                    reason = (
+                        f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
+                        f"({torch_version}) est compilé pour CUDA (NVIDIA)."
+                    )
+                    advice = (
+                        "Pour benchmarker votre GPU Intel, installez PyTorch "
+                        "avec le support XPU et intel-extension-for-pytorch :\n"
+                        "pip install intel-extension-for-pytorch"
+                    )
+                else:
+                    reason = (
+                        f"GPU Intel ({gpu_name}) détecté, mais PyTorch n'a pas "
+                        f"le support XPU activé."
+                    )
+                    advice = (
+                        "Installez intel-extension-for-pytorch pour activer "
+                        "le support GPU Intel :\n"
+                        "pip install intel-extension-for-pytorch"
+                    )
+        except Exception:
+            pass
+
+        result = {
             "test": "GPU Compute",
             "status": "skipped",
-            "reason": "Aucun GPU compatible (CUDA/XPU/MPS) détecté",
+            "reason": reason,
         }
+        if advice:
+            result["advice"] = advice
+        return result
 
     sizes = [1024, 2048, 4096]
     results = {}
