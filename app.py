@@ -651,10 +651,29 @@ def page_benchmark():
                         )
 
                     st.session_state.ai_results = ai_results
-                    ai_status.update(
-                        label=f"Benchmarks IA terminés ({ai_results['total_time_s']:.1f}s)",
-                        state="complete"
-                    )
+
+                    # Vérifier les erreurs individuelles par modèle
+                    model_errors = []
+                    for mk, mr in ai_results.get("results", {}).items():
+                        if mr.get("status") == "error":
+                            model_errors.append((mr.get("model", mk), mr.get("error", "Erreur inconnue")))
+                    for mk, comp in ai_results.get("quantization_comparison", {}).items():
+                        for qk, qr in comp.get("results", {}).items():
+                            if qr.get("status") == "error":
+                                model_errors.append((f"{comp.get('model_name', mk)} {qk}", qr.get("error", "Erreur inconnue")))
+
+                    if model_errors:
+                        for m_name, m_err in model_errors:
+                            st.error(f"❌ **{m_name}** : {m_err}")
+                        ai_status.update(
+                            label=f"Benchmarks IA terminés avec {len(model_errors)} erreur(s) ({ai_results['total_time_s']:.1f}s)",
+                            state="error" if len(model_errors) == len(ai_results.get('results', {})) else "complete"
+                        )
+                    else:
+                        ai_status.update(
+                            label=f"Benchmarks IA terminés ({ai_results['total_time_s']:.1f}s)",
+                            state="complete"
+                        )
                 except Exception as e:
                     ai_status.update(label=f"Erreur : {e}", state="error")
                     st.error(f"Erreur benchmarks IA : {e}")
@@ -1004,10 +1023,26 @@ def _display_single_result(data: dict, filename: str):
                 table_data["Mémoire (Go)"].append(0)
                 table_data["Stabilité"].append("skipped")
                 table_data["Backend"].append("")
+            elif model_data.get("status") == "error":
+                table_data["Modèle"].append(model_data.get("model", key))
+                table_data["Params"].append(model_data.get("params", ""))
+                table_data["Tokens/s"].append(0)
+                table_data["1er token (s)"].append(0)
+                table_data["Mémoire (Go)"].append(0)
+                table_data["Stabilité"].append("❌ erreur")
+                table_data["Backend"].append("")
 
         import pandas as pd
         df = pd.DataFrame(table_data)
         st.dataframe(df, use_container_width=True, hide_index=True)
+
+        # Afficher les erreurs détaillées
+        error_models = {k: v for k, v in ai_results.items() if v.get("status") == "error"}
+        if error_models:
+            st.markdown("**⚠️ Modèles en erreur :**")
+            for key, model_data in error_models.items():
+                err_msg = model_data.get("error", "Erreur inconnue")
+                st.error(f"**{model_data.get('model', key)}** : {err_msg}")
 
         # Graphique Tokens/s
         active_models = {k: v for k, v in ai_results.items() if v.get("summary")}

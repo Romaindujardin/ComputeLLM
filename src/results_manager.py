@@ -347,6 +347,17 @@ def export_to_csv(result_file: str, output_path: str = None) -> Path:
                 "value": summary.get("avg_first_token_latency_s", 0),
                 "mean_time_s": 0,
             })
+        elif model_data.get("status") in ("error", "skipped"):
+            rows.append({
+                "machine": machine_name,
+                "benchmark_type": "ai_inference",
+                "test": model_data.get("model", model_key),
+                "sub_test": model_data.get("status", "error"),
+                "metric": "error",
+                "value": 0,
+                "mean_time_s": 0,
+                "error": model_data.get("error", model_data.get("reason", "")),
+            })
 
     # Benchmarks de comparaison de quantification
     quant_comp = data.get("ai_benchmarks", {}).get("quantization_comparison", {})
@@ -403,7 +414,11 @@ def export_to_csv(result_file: str, output_path: str = None) -> Path:
 
     # Écrire le CSV
     if rows:
-        fieldnames = rows[0].keys()
+        # Collecter tous les noms de colonnes (certaines lignes ont 'error')
+        all_keys = set()
+        for r in rows:
+            all_keys.update(r.keys())
+        fieldnames = sorted(all_keys, key=lambda k: list(rows[0].keys()).index(k) if k in rows[0] else 999)
         with open(output_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
