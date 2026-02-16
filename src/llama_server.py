@@ -201,12 +201,16 @@ class LlamaServerManager:
         # Démarrer le processus
         try:
             # Rediriger stdout/stderr pour ne pas polluer le terminal
-            self._process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                preexec_fn=os.setsid if platform.system() != "Windows" else None,
-            )
+            kwargs = {
+                "stdout": subprocess.PIPE,
+                "stderr": subprocess.PIPE,
+            }
+            if platform.system() == "Windows":
+                kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+            else:
+                kwargs["preexec_fn"] = os.setsid
+
+            self._process = subprocess.Popen(cmd, **kwargs)
         except PermissionError:
             raise PermissionError(
                 f"Permission refusée pour exécuter {self.binary_path}. "
@@ -255,7 +259,14 @@ class LlamaServerManager:
 
         try:
             if platform.system() == "Windows":
-                self._process.terminate()
+                # Sur Windows, utiliser taskkill pour tuer l'arbre de processus
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self._process.pid)],
+                        capture_output=True, timeout=LLAMA_SERVER_CONFIG["shutdown_timeout_s"],
+                    )
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    self._process.terminate()
             else:
                 # Envoyer SIGTERM au group de processus
                 os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
@@ -276,6 +287,33 @@ class LlamaServerManager:
 
     def __del__(self):
         self.stop()
+
+
+# =============================================================================
+# Utilitaires internes
+# =============================================================================
+
+def _find_llama_server_pid() -> Optional[int]:
+    """
+    Recherche le PID du processus llama-server en cours d'exécution.
+    Utilisé pour mesurer la mémoire réelle consommée par le serveur.
+    """
+    try:
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                name = proc.info.get("name", "").lower()
+                if "llama-server" in name or "llama_server" in name:
+                    return proc.info["pid"]
+                # Vérifier aussi dans la ligne de commande
+                cmdline = proc.info.get("cmdline") or []
+                for arg in cmdline:
+                    if "llama-server" in arg.lower() or "llama_server" in arg.lower():
+                        return proc.info["pid"]
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+    except Exception:
+        pass
+    return None
 
 
 # =============================================================================
@@ -306,9 +344,19 @@ def run_inference_via_server(
     if max_tokens is None:
         max_tokens = INFERENCE_CONFIG["max_tokens"]
 
-    # Mesurer la mémoire avant (processus Python uniquement)
+    # Mesurer la mémoire avant (processus Python + llama-server si possible)
     process = psutil.Process()
     mem_before = process.memory_info().rss / (1024**3)
+
+    # Essayer de mesurer la mémoire du processus llama-server
+    server_mem_before = 0.0
+    server_pid = _find_llama_server_pid()
+    if server_pid:
+        try:
+            server_proc = psutil.Process(server_pid)
+            server_mem_before = server_proc.memory_info().rss / (1024**3)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            server_pid = None
 
     url = f"{server_url}/v1/chat/completions"
     payload = {
@@ -393,14 +441,28 @@ def run_inference_via_server(
 
     mem_after = process.memory_info().rss / (1024**3)
 
+    # Mémoire llama-server après inférence
+    server_mem_after = 0.0
+    if server_pid:
+        try:
+            server_proc = psutil.Process(server_pid)
+            server_mem_after = server_proc.memory_info().rss / (1024**3)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            server_mem_after = server_mem_before
+
+    # Mémoire totale = Python + llama-server
+    total_mem_before = mem_before + server_mem_before
+    total_mem_after = mem_after + server_mem_after
+
     result = {
         "tokens_generated": tokens_generated,
         "total_time_s": round(total_time, 4),
         "first_token_latency_s": round(first_token_time, 4) if first_token_time else None,
         "tokens_per_second": round(tokens_generated / total_time, 2) if total_time > 0 and tokens_generated > 0 else 0,
-        "memory_before_gb": round(mem_before, 3),
-        "memory_after_gb": round(mem_after, 3),
-        "memory_delta_gb": round(mem_after - mem_before, 3),
+        "memory_before_gb": round(total_mem_before, 3),
+        "memory_after_gb": round(total_mem_after, 3),
+        "memory_delta_gb": round(total_mem_after - total_mem_before, 3),
+        "server_memory_gb": round(server_mem_after, 3) if server_pid else None,
         "error": error,
         "success": error is None,
         "inference_mode": "server",
@@ -684,11 +746,19 @@ def benchmark_quantization_server(
             "server_url": server_manager.base_url,
         }
 
-        # Mémoire après chargement
+        # Mémoire après chargement (Python + llama-server)
         process = psutil.Process()
-        result["memory_after_load_gb"] = round(
-            process.memory_info().rss / (1024**3), 3
-        )
+        python_mem = process.memory_info().rss / (1024**3)
+        server_pid = _find_llama_server_pid()
+        server_mem = 0.0
+        if server_pid:
+            try:
+                server_mem = psutil.Process(server_pid).memory_info().rss / (1024**3)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        result["memory_after_load_gb"] = round(python_mem + server_mem, 3)
+        if server_pid:
+            result["server_memory_after_load_gb"] = round(server_mem, 3)
 
         # Échauffement
         if progress_callback:

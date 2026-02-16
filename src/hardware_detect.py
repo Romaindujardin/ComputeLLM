@@ -180,6 +180,14 @@ def detect_gpu() -> Dict[str, Any]:
         info["backends"].append("cuda")
         info["primary_backend"] = "cuda"
 
+    # --- Détection Intel GPU / SYCL ---
+    intel_gpu = _detect_intel_gpu()
+    if intel_gpu:
+        info["gpus"].append(intel_gpu)
+        info["backends"].append("sycl")
+        if info["primary_backend"] == "cpu":
+            info["primary_backend"] = "sycl"
+
     # --- Détection Metal (macOS) ---
     if system == "Darwin":
         metal_gpu = _detect_metal_gpu()
@@ -266,6 +274,121 @@ def _detect_metal_gpu() -> Optional[Dict[str, Any]]:
     return None
 
 
+def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
+    """
+    Détecte un GPU Intel (Arc, Data Center GPU, Flex, intégré) via
+    plusieurs méthodes : PyTorch XPU, xpu-smi, lspci, WMI (Windows).
+    """
+    system = platform.system()
+
+    # Méthode 1 : PyTorch XPU
+    try:
+        import torch
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            name = "Intel GPU"
+            try:
+                name = torch.xpu.get_device_name(0)
+            except Exception:
+                pass
+            gpu_info = {
+                "type": "Intel",
+                "name": name,
+                "backend": "sycl",
+                "detected_via": "pytorch_xpu",
+            }
+            try:
+                mem_total = torch.xpu.get_device_properties(0).total_memory
+                gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
+            except Exception:
+                pass
+            return gpu_info
+    except ImportError:
+        pass
+
+    # Méthode 2 : xpu-smi (Linux avec pilotes Intel)
+    if system == "Linux":
+        try:
+            result = subprocess.run(
+                ["xpu-smi", "discovery"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                output = result.stdout
+                name_match = re.search(r"Device Name\s*:\s*(.+)", output)
+                mem_match = re.search(r"Memory Physical Size\s*:\s*([\d.]+)\s*(\w+)", output)
+                name = name_match.group(1).strip() if name_match else "Intel GPU"
+                gpu_info = {
+                    "type": "Intel",
+                    "name": name,
+                    "backend": "sycl",
+                    "detected_via": "xpu-smi",
+                }
+                if mem_match:
+                    size_val = float(mem_match.group(1))
+                    unit = mem_match.group(2).upper()
+                    if "GI" in unit or "GB" in unit:
+                        gpu_info["vram_total_mb"] = round(size_val * 1024)
+                    elif "MI" in unit or "MB" in unit:
+                        gpu_info["vram_total_mb"] = round(size_val)
+                return gpu_info
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    # Méthode 3 : lspci (Linux) ou WMI (Windows)
+    intel_gpu_keywords = ["arc ", "dg1", "dg2", "flex ", "iris", "uhd graphics"]
+
+    if system == "Linux":
+        try:
+            result = subprocess.run(
+                ["lspci", "-nn"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    lower = line.lower()
+                    if "vga" in lower or "3d" in lower or "display" in lower:
+                        if "intel" in lower and any(kw in lower for kw in intel_gpu_keywords):
+                            name_match = re.search(r"Intel.*?(?:\[|$)", line)
+                            name = name_match.group(0).rstrip("[").strip() if name_match else "Intel GPU"
+                            return {
+                                "type": "Intel",
+                                "name": name,
+                                "backend": "sycl",
+                                "detected_via": "lspci",
+                            }
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    elif system == "Windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                data = json.loads(result.stdout)
+                if isinstance(data, dict):
+                    data = [data]
+                for gpu in data:
+                    name = gpu.get("Name", "").lower()
+                    if "intel" in name and any(kw in name for kw in intel_gpu_keywords):
+                        gpu_info = {
+                            "type": "Intel",
+                            "name": gpu.get("Name", "Intel GPU"),
+                            "backend": "sycl",
+                            "detected_via": "wmi",
+                        }
+                        adapter_ram = gpu.get("AdapterRAM")
+                        if adapter_ram and adapter_ram > 0:
+                            gpu_info["vram_total_mb"] = round(adapter_ram / (1024**2))
+                        return gpu_info
+        except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
+
+    return None
+
+
 def _detect_python_backends() -> Dict[str, bool]:
     """Vérifie quels backends Python ML sont disponibles."""
     backends = {}
@@ -280,6 +403,13 @@ def _detect_python_backends() -> Dict[str, bool]:
             backends["pytorch_cuda_version"] = torch.version.cuda
         # MPS (Metal Performance Shaders)
         backends["pytorch_mps"] = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        # XPU (Intel)
+        backends["pytorch_xpu"] = hasattr(torch, "xpu") and torch.xpu.is_available()
+        if backends["pytorch_xpu"]:
+            try:
+                backends["pytorch_xpu_device"] = torch.xpu.get_device_name(0)
+            except Exception:
+                pass
     except ImportError:
         backends["pytorch"] = False
 
@@ -290,6 +420,24 @@ def _detect_python_backends() -> Dict[str, bool]:
         backends["llama_cpp_version"] = getattr(llama_cpp, "__version__", "unknown")
     except ImportError:
         backends["llama_cpp"] = False
+
+    # llama-server (binaire)
+    try:
+        from src.llama_server import find_llama_server_binary
+        server_path = find_llama_server_binary()
+        backends["llama_server"] = server_path is not None
+        if server_path:
+            backends["llama_server_path"] = server_path
+    except ImportError:
+        backends["llama_server"] = False
+
+    # Intel Extension for PyTorch (IPEX)
+    try:
+        import intel_extension_for_pytorch
+        backends["ipex"] = True
+        backends["ipex_version"] = getattr(intel_extension_for_pytorch, "__version__", "unknown")
+    except ImportError:
+        backends["ipex"] = False
 
     return backends
 

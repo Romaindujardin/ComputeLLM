@@ -82,6 +82,12 @@ def system_cleanup(label: str = "", verbose: bool = True) -> Dict[str, float]:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.synchronize()
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            try:
+                torch.xpu.empty_cache()
+                torch.xpu.synchronize()
+            except AttributeError:
+                pass
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             torch.mps.empty_cache()
     except (ImportError, Exception):
@@ -195,6 +201,11 @@ class ResourceMonitor:
                 gpu_usage = self._sample_nvidia_gpu()
                 if gpu_usage:
                     sample.update(gpu_usage)
+                else:
+                    # Monitoring GPU Intel si disponible
+                    intel_usage = self._sample_intel_gpu()
+                    if intel_usage:
+                        sample.update(intel_usage)
 
                 self.samples.append(sample)
             except Exception:
@@ -220,6 +231,33 @@ class ResourceMonitor:
                         "gpu_memory_total_mb": float(parts[2]),
                         "gpu_temperature_c": float(parts[3]),
                     }
+        except (FileNotFoundError, Exception):
+            pass
+        return None
+
+    def _sample_intel_gpu(self) -> Optional[Dict[str, Any]]:
+        """Échantillonne l'utilisation GPU Intel via xpu-smi."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["xpu-smi", "dump", "-d", "0", "-m", "0,5,18", "-n", "1"],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                for line in reversed(lines):
+                    if line.startswith("Timestamp"):
+                        continue
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 4:
+                        try:
+                            return {
+                                "gpu_utilization_percent": float(parts[1]) if parts[1] != "N/A" else 0.0,
+                                "gpu_memory_used_mb": float(parts[2]) if parts[2] != "N/A" else 0.0,
+                                "gpu_temperature_c": float(parts[3]) if parts[3] != "N/A" else 0.0,
+                            }
+                        except (ValueError, IndexError):
+                            pass
         except (FileNotFoundError, Exception):
             pass
         return None
@@ -496,6 +534,13 @@ def benchmark_gpu(
         device = torch.device("cuda")
         device_name = torch.cuda.get_device_name(0)
         backend = "CUDA"
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        device = torch.device("xpu")
+        try:
+            device_name = torch.xpu.get_device_name(0)
+        except Exception:
+            device_name = "Intel GPU (XPU)"
+        backend = "SYCL/XPU"
     elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = torch.device("mps")
         device_name = "Apple Silicon (MPS)"
@@ -504,7 +549,7 @@ def benchmark_gpu(
         return {
             "test": "GPU Compute",
             "status": "skipped",
-            "reason": "Aucun GPU compatible (CUDA/MPS) détecté",
+            "reason": "Aucun GPU compatible (CUDA/XPU/MPS) détecté",
         }
 
     sizes = [1024, 2048, 4096]
@@ -521,6 +566,8 @@ def benchmark_gpu(
         _ = torch.mm(A, B)
         if device.type == "cuda":
             torch.cuda.synchronize()
+        elif device.type == "xpu":
+            torch.xpu.synchronize()
 
         for i in range(3):
             A = torch.randn(size, size, device=device, dtype=torch.float32)
@@ -528,12 +575,16 @@ def benchmark_gpu(
 
             if device.type == "cuda":
                 torch.cuda.synchronize()
+            elif device.type == "xpu":
+                torch.xpu.synchronize()
 
             start = time.perf_counter()
             _ = torch.mm(A, B)
 
             if device.type == "cuda":
                 torch.cuda.synchronize()
+            elif device.type == "xpu":
+                torch.xpu.synchronize()
             elif device.type == "mps":
                 # Synchronisation MPS
                 (A + B).cpu()
@@ -557,6 +608,11 @@ def benchmark_gpu(
     # Nettoyer la mémoire GPU
     if device.type == "cuda":
         torch.cuda.empty_cache()
+    elif device.type == "xpu":
+        try:
+            torch.xpu.empty_cache()
+        except AttributeError:
+            pass
 
     return {
         "test": "GPU Compute",

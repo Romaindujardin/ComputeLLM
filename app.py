@@ -252,7 +252,7 @@ def page_hardware():
     py_backends = gpu.get("python_backends", {})
     if py_backends:
         st.markdown("**Bibliothèques Python détectées :**")
-        py_cols = st.columns(3)
+        py_cols = st.columns(4)
         if py_backends.get("llama_cpp"):
             py_cols[0].success(f"llama-cpp-python {py_backends.get('llama_cpp_version', '')}")
         else:
@@ -262,9 +262,22 @@ def page_hardware():
             ver = py_backends.get("pytorch_version", "")
             cuda_str = f" (CUDA {py_backends['pytorch_cuda_version']})" if py_backends.get("pytorch_cuda") else ""
             mps_str = " (MPS)" if py_backends.get("pytorch_mps") else ""
-            py_cols[1].success(f"PyTorch {ver}{cuda_str}{mps_str}")
+            xpu_str = " (XPU)" if py_backends.get("pytorch_xpu") else ""
+            py_cols[1].success(f"PyTorch {ver}{cuda_str}{mps_str}{xpu_str}")
         else:
             py_cols[1].warning("PyTorch non installé (GPU benchmark indisponible)")
+
+        if py_backends.get("llama_server"):
+            py_cols[2].success(f"llama-server détecté")
+            if py_backends.get("llama_server_path"):
+                st.caption(f"Chemin : {py_backends['llama_server_path']}")
+        else:
+            py_cols[2].info("llama-server non trouvé (optionnel)")
+
+        if py_backends.get("ipex"):
+            py_cols[3].success(f"IPEX {py_backends.get('ipex_version', '')}")
+        elif py_backends.get("pytorch_xpu"):
+            py_cols[3].info("IPEX non détecté (XPU via PyTorch)")
 
     # Modèles compatibles
     st.markdown("---")

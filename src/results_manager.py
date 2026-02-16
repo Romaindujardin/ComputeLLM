@@ -95,13 +95,22 @@ def _get_machine_name(hardware_info: Dict[str, Any]) -> str:
     gpus = hardware_info.get("gpu", {}).get("gpus", [])
     if gpus:
         gpu_name = gpus[0].get("name", "")
-        if "NVIDIA" in gpu_name or gpus[0].get("type") == "NVIDIA":
+        gpu_type = gpus[0].get("type", "")
+        if "NVIDIA" in gpu_name or gpu_type == "NVIDIA":
             # Extraire le nom court du GPU
             for keyword in ["RTX", "GTX", "A100", "A6000", "H100", "V100"]:
                 if keyword in gpu_name:
                     parts.append(keyword)
                     break
-        elif "Apple" in str(gpus[0].get("type", "")):
+        elif gpu_type == "Intel" or "Intel" in gpu_name:
+            # Extraire le nom court du GPU Intel
+            for keyword in ["Arc", "DG1", "DG2", "Flex", "A770", "A750", "A380"]:
+                if keyword.lower() in gpu_name.lower():
+                    parts.append(keyword)
+                    break
+            else:
+                parts.append("IntelGPU")
+        elif "Apple" in str(gpu_type):
             if "Apple" not in parts:
                 parts.append("Metal")
 

@@ -289,7 +289,7 @@ MONITOR_INTERVAL = 0.5  # Intervalle d'échantillonnage en secondes
 LLAMA_SERVER_CONFIG = {
     "host": "127.0.0.1",
     "port": 8080,
-    "startup_timeout_s": 120,       # Temps max pour démarrer le serveur
+    "startup_timeout_s": 300,       # Temps max pour démarrer le serveur (SYCL: 1ère compilation longue)
     "health_check_interval_s": 1.0, # Intervalle entre les checks de santé
     "shutdown_timeout_s": 10,       # Temps max pour arrêter le serveur
 }

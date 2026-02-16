@@ -256,6 +256,7 @@ def detect_best_backend() -> Dict[str, Any]:
     """
     Détecte le meilleur backend disponible pour l'inférence.
     Retourne des informations sur le backend sélectionné.
+    Supporte : CUDA (NVIDIA), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
     """
     system = platform.system()
     machine = platform.machine()
@@ -279,6 +280,82 @@ def detect_best_backend() -> Dict[str, Any]:
             return result
     except (FileNotFoundError, Exception):
         pass
+
+    # Vérifier Intel XPU / SYCL (Windows/Linux)
+    # Méthode 1 : PyTorch XPU (intel-extension-for-pytorch)
+    try:
+        import torch
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            device_name = torch.xpu.get_device_name(0)
+            result["backend"] = "sycl"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"Intel XPU détecté ({device_name}), utilisation de SYCL"
+            result["intel_device"] = device_name
+            return result
+    except (ImportError, Exception):
+        pass
+
+    # Méthode 2 : xpu-smi (Linux)
+    if system == "Linux":
+        try:
+            import subprocess
+            xpu_check = subprocess.run(
+                ["xpu-smi", "discovery"], capture_output=True, timeout=5, text=True
+            )
+            if xpu_check.returncode == 0 and "Device" in xpu_check.stdout:
+                result["backend"] = "sycl"
+                result["n_gpu_layers"] = -1
+                result["details"] = "Intel GPU détecté via xpu-smi, utilisation de SYCL"
+                return result
+        except (FileNotFoundError, Exception):
+            pass
+
+    # Méthode 3 : Détection Intel via lspci (Linux) ou WMI (Windows)
+    if system in ("Linux", "Windows"):
+        intel_gpu_found = False
+        if system == "Linux":
+            try:
+                import subprocess
+                lspci = subprocess.run(
+                    ["lspci", "-nn"], capture_output=True, timeout=5, text=True
+                )
+                if lspci.returncode == 0:
+                    for line in lspci.stdout.splitlines():
+                        line_lower = line.lower()
+                        if "intel" in line_lower and ("vga" in line_lower or "display" in line_lower or "3d" in line_lower):
+                            # Vérifier si c'est un GPU discret Intel (Arc, DG, Flex)
+                            for kw in ["arc", "dg1", "dg2", "flex", "a770", "a750", "a580", "a380"]:
+                                if kw in line_lower:
+                                    intel_gpu_found = True
+                                    break
+                            if intel_gpu_found:
+                                break
+            except (FileNotFoundError, Exception):
+                pass
+        elif system == "Windows":
+            try:
+                import subprocess
+                ps_cmd = (
+                    'powershell -Command "'
+                    "Get-CimInstance Win32_VideoController | "
+                    "Where-Object { $_.Name -like '*Intel*Arc*' -or $_.Name -like '*Intel*A7*' -or $_.Name -like '*Intel*A5*' -or $_.Name -like '*Intel*A3*' } | "
+                    "Select-Object -First 1 -ExpandProperty Name"
+                    '"'
+                )
+                ps_result = subprocess.run(
+                    ps_cmd, capture_output=True, timeout=10, text=True, shell=True
+                )
+                if ps_result.returncode == 0 and ps_result.stdout.strip():
+                    intel_gpu_found = True
+                    result["intel_device"] = ps_result.stdout.strip()
+            except Exception:
+                pass
+
+        if intel_gpu_found:
+            result["backend"] = "sycl"
+            result["n_gpu_layers"] = -1
+            result["details"] = "Intel GPU discret détecté, utilisation de SYCL"
+            return result
 
     # Vérifier Metal (macOS)
     if system == "Darwin":
@@ -316,7 +393,12 @@ def _load_model(model_path: str, backend_info: Dict[str, Any], n_ctx: int = 2048
             "Installation :\n"
             "  macOS (Metal) : CMAKE_ARGS=\"-DGGML_METAL=on\" pip install llama-cpp-python\n"
             "  Windows (CUDA): CMAKE_ARGS=\"-DGGML_CUDA=on\" pip install llama-cpp-python\n"
-            "  CPU only      : pip install llama-cpp-python"
+            "  Intel (SYCL)  : CMAKE_ARGS=\"-DGGML_SYCL=on\" pip install llama-cpp-python\n"
+            "  CPU only      : pip install llama-cpp-python\n"
+            "\n"
+            "Alternative sans compilation : utilisez le mode llama-server\n"
+            "  Téléchargez le binaire depuis https://github.com/ggerganov/llama.cpp/releases\n"
+            "  Puis activez 'Utiliser llama-server' dans le Benchmark."
         )
 
     n_gpu_layers = backend_info.get("n_gpu_layers", 0)

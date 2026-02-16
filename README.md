@@ -328,7 +328,8 @@ Modifiez `src/config.py` pour ajuster :
     - `-DGGML_VULKAN=on`
     - `-DGGML_SYCL=on`
     - `-DGGML_CLBLAST=on`
-  - Vérifier à l’exécution que le backend compilé correspond au GPU détecté  - ~~Mode llama-server (binaires pré-compilés, zéro compilation)~~ ✅
+  - Vérifier à l’exécution que le backend compilé correspond au GPU détecté - ~~Mode llama-server (binaires pré-compilés, zéro compilation)~~ ✅
+
 ---
 
 ### Priorité moyenne
@@ -337,7 +338,7 @@ Modifiez `src/config.py` pour ajuster :
   - Détecter automatiquement le GPU au premier lancement
   - Proposer la bonne commande d’installation selon la plateforme
   - Ajouter un script d’installation automatique par OS
-  - Afficher un avertissement si version CPU-only détectée  - ~~Mode llama-server comme alternative sans compilation~~ ✅
+  - Afficher un avertissement si version CPU-only détectée - ~~Mode llama-server comme alternative sans compilation~~ ✅
 - [ ] **Monitoring unifié**
   - Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`
   - Normaliser le format des métriques (utilisation %, VRAM, température)
