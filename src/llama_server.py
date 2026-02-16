@@ -53,15 +53,34 @@ def find_llama_server_binary(custom_path: Optional[str] = None) -> Optional[str]
 
     # 1. Chemin personnalisé
     if custom_path:
+        # Nettoyer le chemin (espaces, guillemets)
+        custom_path = custom_path.strip().strip('"').strip("'").strip()
         p = Path(custom_path)
-        if p.is_file() and os.access(str(p), os.X_OK):
+
+        if p.is_file():
             return str(p.resolve())
-        # Si c'est un dossier, chercher dedans
+
+        # Si c'est un dossier, chercher dedans (y compris sous-dossiers courants)
         if p.is_dir():
-            for name in LLAMA_SERVER_BINARY_NAMES.get(system, ["llama-server"]):
+            binary_names = LLAMA_SERVER_BINARY_NAMES.get(system, ["llama-server"])
+            # Chercher dans le dossier directement
+            for name in binary_names:
                 candidate = p / name
-                if candidate.is_file() and os.access(str(candidate), os.X_OK):
+                if candidate.is_file():
                     return str(candidate.resolve())
+            # Chercher dans les sous-dossiers courants (build/bin, bin, Release, etc.)
+            sub_dirs = [
+                p / "bin",
+                p / "build" / "bin",
+                p / "build" / "bin" / "Release",
+                p / "Release",
+            ]
+            for sub in sub_dirs:
+                if sub.is_dir():
+                    for name in binary_names:
+                        candidate = sub / name
+                        if candidate.is_file():
+                            return str(candidate.resolve())
 
     # 2. Variable d'environnement
     env_path = os.environ.get("LLAMA_SERVER_PATH")
@@ -174,8 +193,34 @@ class LlamaServerManager:
                 "Téléchargez-le depuis https://github.com/ggerganov/llama.cpp/releases"
             )
 
-        if not Path(self.binary_path).is_file():
-            raise FileNotFoundError(f"Binaire introuvable : {self.binary_path}")
+        # Nettoyer et résoudre le chemin du binaire
+        cleaned_path = self.binary_path.strip().strip('"').strip("'").strip()
+
+        # Si le chemin est un dossier, essayer de trouver le binaire dedans
+        if Path(cleaned_path).is_dir():
+            resolved = find_llama_server_binary(custom_path=cleaned_path)
+            if resolved:
+                self.binary_path = resolved
+                cleaned_path = resolved
+            else:
+                raise FileNotFoundError(
+                    f"Dossier trouvé mais aucun binaire llama-server dedans : {cleaned_path}\n"
+                    "Le dossier doit contenir llama-server.exe (Windows) ou llama-server (Linux/macOS)."
+                )
+        elif not Path(cleaned_path).is_file():
+            # Dernier essai : résolution via find_llama_server_binary
+            resolved = find_llama_server_binary(custom_path=cleaned_path)
+            if resolved:
+                self.binary_path = resolved
+                cleaned_path = resolved
+            else:
+                raise FileNotFoundError(
+                    f"Binaire introuvable : {cleaned_path}\n"
+                    "Vérifiez que le chemin est correct et que le fichier existe.\n"
+                    "Astuce : vous pouvez entrer le chemin du dossier contenant le binaire."
+                )
+        else:
+            self.binary_path = cleaned_path
 
         if not Path(model_path).is_file():
             raise FileNotFoundError(f"Modèle introuvable : {model_path}")

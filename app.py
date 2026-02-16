@@ -465,15 +465,40 @@ def page_benchmark():
                 binary_path = st.text_input(
                     "Chemin vers llama-server",
                     value=default_path,
-                    placeholder="/chemin/vers/llama-server",
+                    placeholder="C:/chemin/vers/llama-server.exe ou /chemin/vers/llama-server",
                     key="server_binary_input",
-                    help="Chemin vers le binaire llama-server. Auto-détecté si dans le PATH.",
+                    help="Chemin vers le binaire llama-server (fichier .exe ou dossier contenant le binaire).",
                 )
+
+                # Nettoyer le chemin (espaces, guillemets)
+                if binary_path:
+                    binary_path = binary_path.strip().strip('"').strip("'").strip()
+
+                # Résoudre le chemin : fichier direct ou dossier contenant le binaire
+                if binary_path:
+                    resolved = find_llama_server_binary(custom_path=binary_path)
+                    if resolved:
+                        binary_path = resolved
+                        st.success(f"Binaire trouvé : `{binary_path}`")
+                    else:
+                        # Le chemin brut sera testé au lancement
+                        import os
+                        if os.path.isfile(binary_path):
+                            st.success(f"Binaire : `{binary_path}`")
+                        elif os.path.isdir(binary_path):
+                            st.error(
+                                f"Dossier trouvé mais aucun llama-server(.exe) dedans.\n"
+                                f"Vérifiez que le binaire est bien dans : `{binary_path}`"
+                            )
+                        else:
+                            st.error(
+                                f"Fichier introuvable : `{binary_path}`\n"
+                                "Vérifiez le chemin (copier-coller depuis l'explorateur de fichiers)."
+                            )
+
                 st.session_state.server_binary_path = binary_path
 
-                if binary_path:
-                    st.success(f"Binaire : `{binary_path}`")
-                else:
+                if not binary_path:
                     st.warning(
                         "Binaire llama-server introuvable. "
                         f"[Télécharger les binaires pré-compilés]({get_llama_cpp_releases_url()})"
