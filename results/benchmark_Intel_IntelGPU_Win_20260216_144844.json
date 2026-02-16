@@ -1,0 +1,968 @@
+{
+  "id": "20260216_144844",
+  "timestamp": "2026-02-16T14:48:44.660617",
+  "version": "1.0.0",
+  "hardware": {
+    "os": {
+      "system": "Windows",
+      "release": "10",
+      "version": "10.0.26100",
+      "machine": "AMD64",
+      "architecture": "64bit",
+      "platform": "Windows-10-10.0.26100-SP0",
+      "python_version": "3.10.11"
+    },
+    "cpu": {
+      "physical_cores": 4,
+      "logical_cores": 8,
+      "architecture": "AMD64",
+      "detection_error": "[WinError 2] Le fichier spécifié est introuvable",
+      "model": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+      "is_apple_silicon": false,
+      "architecture_type": "AMD64",
+      "frequency_mhz": {
+        "current": 2419.0,
+        "min": null,
+        "max": 2419.0
+      }
+    },
+    "gpu": {
+      "gpus": [
+        {
+          "type": "Intel",
+          "name": "Intel(R) Iris(R) Xe Graphics",
+          "backend": "sycl",
+          "detected_via": "pytorch_xpu",
+          "vram_total_mb": 3273
+        }
+      ],
+      "backends": [
+        "sycl",
+        "cpu"
+      ],
+      "primary_backend": "sycl",
+      "python_backends": {
+        "pytorch": true,
+        "pytorch_version": "2.10.0+xpu",
+        "pytorch_cuda": false,
+        "pytorch_mps": false,
+        "pytorch_xpu": true,
+        "pytorch_xpu_device": "Intel(R) Iris(R) Xe Graphics",
+        "llama_cpp": false,
+        "llama_server": false,
+        "ipex": false
+      }
+    },
+    "ram": {
+      "total_gb": 7.73,
+      "available_gb": 1.1,
+      "used_gb": 6.63,
+      "percent_used": 85.8,
+      "swap_total_gb": 14.5,
+      "swap_used_gb": 1.73,
+      "unified_memory": false
+    }
+  },
+  "classic_benchmarks": {
+    "type": "classic_benchmarks",
+    "total_time_s": 9.69,
+    "benchmarks": {
+      "cpu_single_thread": {
+        "test": "CPU Single-Thread",
+        "method": "Matrix multiplication (NumPy, 1 thread)",
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.004,
+              0.0016,
+              0.0015
+            ],
+            "mean_s": 0.0024,
+            "std_s": 0.0011,
+            "gflops": 114.15
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0216,
+              0.015,
+              0.0148
+            ],
+            "mean_s": 0.0171,
+            "std_s": 0.0032,
+            "gflops": 125.4
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0583,
+              0.0709,
+              0.0569
+            ],
+            "mean_s": 0.062,
+            "std_s": 0.0063,
+            "gflops": 276.9
+          }
+        }
+      },
+      "cpu_multi_thread": {
+        "test": "CPU Multi-Thread",
+        "method": "Matrix multiplication (NumPy, 8 threads)",
+        "n_threads": 8,
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.0015,
+              0.0021,
+              0.0014
+            ],
+            "mean_s": 0.0017,
+            "std_s": 0.0003,
+            "gflops": 161.15
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0105,
+              0.0069,
+              0.0139
+            ],
+            "mean_s": 0.0105,
+            "std_s": 0.0029,
+            "gflops": 205.09
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0587,
+              0.0751,
+              0.0676
+            ],
+            "mean_s": 0.0671,
+            "std_s": 0.0067,
+            "gflops": 255.94
+          }
+        }
+      },
+      "memory_bandwidth": {
+        "test": "Memory Bandwidth",
+        "method": "NumPy array operations (256 Mo)",
+        "data_size_gb": 0.25,
+        "results": {
+          "write": {
+            "mean_s": 0.129,
+            "bandwidth_gb_s": 1.94
+          },
+          "read": {
+            "mean_s": 0.0672,
+            "bandwidth_gb_s": 3.72
+          },
+          "copy": {
+            "mean_s": 0.1347,
+            "bandwidth_gb_s": 1.86
+          }
+        }
+      },
+      "gpu_compute": {
+        "test": "GPU Compute",
+        "status": "completed",
+        "device": "Intel(R) Iris(R) Xe Graphics",
+        "backend": "SYCL/XPU",
+        "results": {
+          "1024x1024": {
+            "times_s": [
+              0.003,
+              0.003,
+              0.0028
+            ],
+            "mean_s": 0.0029,
+            "gflops": 733.86
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0179,
+              0.0229,
+              0.0248
+            ],
+            "mean_s": 0.0219,
+            "gflops": 786.2
+          },
+          "4096x4096": {
+            "times_s": [
+              0.2505,
+              0.2807,
+              0.2694
+            ],
+            "mean_s": 0.2669,
+            "gflops": 514.97
+          }
+        }
+      }
+    },
+    "resource_usage": {
+      "n_samples": 17,
+      "duration_s": 9.115021705627441,
+      "cpu": {
+        "avg_percent": 27.4,
+        "max_percent": 52.8,
+        "min_percent": 0.0
+      },
+      "ram": {
+        "avg_percent": 86.6,
+        "max_percent": 89.3,
+        "peak_used_gb": 6.9
+      }
+    }
+  },
+  "ai_benchmarks": {
+    "type": "ai_benchmarks",
+    "inference_mode": "server",
+    "prompt": "Explain the concept of artificial intelligence in simple terms. What are its main applications and how does it impact our daily lives? Provide specific examples.",
+    "inference_config": {
+      "max_tokens": 256,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "repeat_penalty": 1.1,
+      "n_ctx": 2048,
+      "seed": 42,
+      "n_warmup_runs": 1,
+      "n_benchmark_runs": 3
+    },
+    "total_time_s": 723.78,
+    "models_tested": 1,
+    "results": {
+      "tinyllama-1.1b": {
+        "model": "TinyLlama 1.1B",
+        "params": "1.1B",
+        "status": "completed",
+        "inference_mode": "server",
+        "runs": [
+          {
+            "tokens_generated": 256,
+            "total_time_s": 18.8011,
+            "first_token_latency_s": 0.0989,
+            "tokens_per_second": 13.62,
+            "memory_before_gb": 1.159,
+            "memory_after_gb": 1.125,
+            "memory_delta_gb": -0.034,
+            "server_memory_gb": 0.993,
+            "error": null,
+            "success": true,
+            "inference_mode": "server",
+            "avg_inter_token_latency_ms": 73.34,
+            "p90_inter_token_latency_ms": 78.52
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 18.706,
+            "first_token_latency_s": 0.1262,
+            "tokens_per_second": 13.69,
+            "memory_before_gb": 1.125,
+            "memory_after_gb": 1.038,
+            "memory_delta_gb": -0.087,
+            "server_memory_gb": 0.955,
+            "error": null,
+            "success": true,
+            "inference_mode": "server",
+            "avg_inter_token_latency_ms": 72.86,
+            "p90_inter_token_latency_ms": 79.27
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 18.3471,
+            "first_token_latency_s": 0.1021,
+            "tokens_per_second": 13.95,
+            "memory_before_gb": 1.038,
+            "memory_after_gb": 1.039,
+            "memory_delta_gb": 0.0,
+            "server_memory_gb": 0.955,
+            "error": null,
+            "success": true,
+            "inference_mode": "server",
+            "avg_inter_token_latency_ms": 71.55,
+            "p90_inter_token_latency_ms": 76.81
+          }
+        ],
+        "model_load_time_s": 9.32,
+        "backend": {
+          "backend": "sycl",
+          "n_gpu_layers": -1,
+          "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+          "intel_device": "Intel(R) Iris(R) Xe Graphics",
+          "intel_vram_mb": 3273,
+          "inference_mode": "server",
+          "server_url": "http://127.0.0.1:8080"
+        },
+        "resource_usage": {
+          "n_samples": 98,
+          "duration_s": 55.42672896385193,
+          "cpu": {
+            "avg_percent": 41.6,
+            "max_percent": 86.0,
+            "min_percent": 0.0
+          },
+          "ram": {
+            "avg_percent": 90.8,
+            "max_percent": 96.4,
+            "peak_used_gb": 7.45
+          }
+        },
+        "summary": {
+          "n_successful_runs": 3,
+          "n_total_runs": 3,
+          "avg_tokens_per_second": 13.75,
+          "std_tokens_per_second": 0.14,
+          "avg_first_token_latency_s": 0.1091,
+          "avg_total_time_s": 18.6181,
+          "peak_memory_gb": 1.125,
+          "stability": "stable"
+        }
+      }
+    },
+    "quantization_comparison": {
+      "tinyllama-1.1b": {
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "Q2_K",
+          "Q3_K_M",
+          "Q4_K_M",
+          "Q5_K_M",
+          "Q6_K",
+          "Q8_0"
+        ],
+        "results": {
+          "Q2_K": {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 29.2873,
+                "first_token_latency_s": 0.1219,
+                "tokens_per_second": 8.74,
+                "memory_before_gb": 1.524,
+                "memory_after_gb": 1.365,
+                "memory_delta_gb": -0.159,
+                "server_memory_gb": 1.286,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 114.37,
+                "p90_inter_token_latency_ms": 130.75
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 33.8527,
+                "first_token_latency_s": 0.153,
+                "tokens_per_second": 7.56,
+                "memory_before_gb": 1.365,
+                "memory_after_gb": 1.247,
+                "memory_delta_gb": -0.118,
+                "server_memory_gb": 1.168,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 132.15,
+                "p90_inter_token_latency_ms": 147.4
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 31.1122,
+                "first_token_latency_s": 0.1143,
+                "tokens_per_second": 8.23,
+                "memory_before_gb": 1.247,
+                "memory_after_gb": 1.247,
+                "memory_delta_gb": 0.0,
+                "server_memory_gb": 1.168,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 121.56,
+                "p90_inter_token_latency_ms": 130.13
+              }
+            ],
+            "actual_file_size_gb": 0.45,
+            "model_load_time_s": 2.62,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 1.473,
+            "server_memory_after_load_gb": 1.348,
+            "resource_usage": {
+              "n_samples": 159,
+              "duration_s": 94.23889398574829,
+              "cpu": {
+                "avg_percent": 67.7,
+                "max_percent": 100.0,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 89.7,
+                "max_percent": 94.0,
+                "peak_used_gb": 7.27
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 8.18,
+              "std_tokens_per_second": 0.48,
+              "min_tokens_per_second": 7.56,
+              "max_tokens_per_second": 8.74,
+              "avg_first_token_latency_s": 0.1297,
+              "avg_inter_token_latency_ms": 122.69,
+              "avg_total_time_s": 31.4174,
+              "peak_memory_gb": 1.365,
+              "stability": "stable"
+            }
+          },
+          "Q3_K_M": {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.51,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 29.4706,
+                "first_token_latency_s": 0.1339,
+                "tokens_per_second": 8.69,
+                "memory_before_gb": 1.665,
+                "memory_after_gb": 1.56,
+                "memory_delta_gb": -0.105,
+                "server_memory_gb": 1.456,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 115.04,
+                "p90_inter_token_latency_ms": 123.73
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 28.5298,
+                "first_token_latency_s": 0.1583,
+                "tokens_per_second": 8.97,
+                "memory_before_gb": 1.56,
+                "memory_after_gb": 1.567,
+                "memory_delta_gb": 0.007,
+                "server_memory_gb": 1.463,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 111.26,
+                "p90_inter_token_latency_ms": 118.68
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 28.3466,
+                "first_token_latency_s": 0.1294,
+                "tokens_per_second": 9.03,
+                "memory_before_gb": 1.567,
+                "memory_after_gb": 1.571,
+                "memory_delta_gb": 0.004,
+                "server_memory_gb": 1.467,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 110.65,
+                "p90_inter_token_latency_ms": 114.91
+              }
+            ],
+            "actual_file_size_gb": 0.513,
+            "model_load_time_s": 3.6,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 1.569,
+            "server_memory_after_load_gb": 1.448,
+            "resource_usage": {
+              "n_samples": 144,
+              "duration_s": 86.33353304862976,
+              "cpu": {
+                "avg_percent": 44.1,
+                "max_percent": 91.6,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 88.7,
+                "max_percent": 90.8,
+                "peak_used_gb": 7.03
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 8.9,
+              "std_tokens_per_second": 0.15,
+              "min_tokens_per_second": 8.69,
+              "max_tokens_per_second": 9.03,
+              "avg_first_token_latency_s": 0.1405,
+              "avg_inter_token_latency_ms": 112.32,
+              "avg_total_time_s": 28.7823,
+              "peak_memory_gb": 1.571,
+              "stability": "stable"
+            }
+          },
+          "Q4_K_M": {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.62,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 22.8941,
+                "first_token_latency_s": 0.0831,
+                "tokens_per_second": 11.18,
+                "memory_before_gb": 1.854,
+                "memory_after_gb": 1.73,
+                "memory_delta_gb": -0.124,
+                "server_memory_gb": 1.657,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 89.45,
+                "p90_inter_token_latency_ms": 100.52
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 21.4015,
+                "first_token_latency_s": 0.1271,
+                "tokens_per_second": 11.96,
+                "memory_before_gb": 1.73,
+                "memory_after_gb": 1.737,
+                "memory_delta_gb": 0.007,
+                "server_memory_gb": 1.664,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 83.43,
+                "p90_inter_token_latency_ms": 92.79
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 21.2956,
+                "first_token_latency_s": 0.1066,
+                "tokens_per_second": 12.02,
+                "memory_before_gb": 1.737,
+                "memory_after_gb": 1.674,
+                "memory_delta_gb": -0.064,
+                "server_memory_gb": 1.623,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 83.09,
+                "p90_inter_token_latency_ms": 95.25
+              }
+            ],
+            "actual_file_size_gb": 0.623,
+            "model_load_time_s": 3.61,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 1.785,
+            "server_memory_after_load_gb": 1.664,
+            "resource_usage": {
+              "n_samples": 109,
+              "duration_s": 65.53283405303955,
+              "cpu": {
+                "avg_percent": 50.6,
+                "max_percent": 86.6,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 91.1,
+                "max_percent": 95.3,
+                "peak_used_gb": 7.37
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 11.72,
+              "std_tokens_per_second": 0.38,
+              "min_tokens_per_second": 11.18,
+              "max_tokens_per_second": 12.02,
+              "avg_first_token_latency_s": 0.1056,
+              "avg_inter_token_latency_ms": 85.32,
+              "avg_total_time_s": 21.8637,
+              "peak_memory_gb": 1.737,
+              "stability": "stable"
+            }
+          },
+          "Q5_K_M": {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.73,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 42.2065,
+                "first_token_latency_s": 0.1905,
+                "tokens_per_second": 6.07,
+                "memory_before_gb": 1.485,
+                "memory_after_gb": 1.452,
+                "memory_delta_gb": -0.033,
+                "server_memory_gb": 1.331,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 164.76,
+                "p90_inter_token_latency_ms": 172.23
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 42.9538,
+                "first_token_latency_s": 0.2068,
+                "tokens_per_second": 5.96,
+                "memory_before_gb": 1.452,
+                "memory_after_gb": 1.276,
+                "memory_delta_gb": -0.176,
+                "server_memory_gb": 1.191,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 167.63,
+                "p90_inter_token_latency_ms": 174.63
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 42.0355,
+                "first_token_latency_s": 0.1751,
+                "tokens_per_second": 6.09,
+                "memory_before_gb": 1.276,
+                "memory_after_gb": 1.276,
+                "memory_delta_gb": 0.0,
+                "server_memory_gb": 1.191,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 164.15,
+                "p90_inter_token_latency_ms": 172.51
+              }
+            ],
+            "actual_file_size_gb": 0.729,
+            "model_load_time_s": 3.62,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 1.636,
+            "server_memory_after_load_gb": 1.516,
+            "resource_usage": {
+              "n_samples": 214,
+              "duration_s": 127.31027221679688,
+              "cpu": {
+                "avg_percent": 38.4,
+                "max_percent": 76.3,
+                "min_percent": 16.7
+              },
+              "ram": {
+                "avg_percent": 91.0,
+                "max_percent": 95.7,
+                "peak_used_gb": 7.41
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 6.04,
+              "std_tokens_per_second": 0.06,
+              "min_tokens_per_second": 5.96,
+              "max_tokens_per_second": 6.09,
+              "avg_first_token_latency_s": 0.1908,
+              "avg_inter_token_latency_ms": 165.51,
+              "avg_total_time_s": 42.3986,
+              "peak_memory_gb": 1.452,
+              "stability": "stable"
+            }
+          },
+          "Q6_K": {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.84,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 28.1046,
+                "first_token_latency_s": 0.1305,
+                "tokens_per_second": 9.11,
+                "memory_before_gb": 2.092,
+                "memory_after_gb": 2.057,
+                "memory_delta_gb": -0.035,
+                "server_memory_gb": 1.98,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 109.7,
+                "p90_inter_token_latency_ms": 121.86
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 26.8537,
+                "first_token_latency_s": 0.1429,
+                "tokens_per_second": 9.53,
+                "memory_before_gb": 2.057,
+                "memory_after_gb": 2.065,
+                "memory_delta_gb": 0.008,
+                "server_memory_gb": 1.987,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 104.75,
+                "p90_inter_token_latency_ms": 115.82
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 26.9114,
+                "first_token_latency_s": 0.1317,
+                "tokens_per_second": 9.51,
+                "memory_before_gb": 2.065,
+                "memory_after_gb": 1.927,
+                "memory_delta_gb": -0.138,
+                "server_memory_gb": 1.874,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 105.02,
+                "p90_inter_token_latency_ms": 113.28
+              }
+            ],
+            "actual_file_size_gb": 0.842,
+            "model_load_time_s": 3.61,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 2.133,
+            "server_memory_after_load_gb": 2.012,
+            "resource_usage": {
+              "n_samples": 132,
+              "duration_s": 81.6955029964447,
+              "cpu": {
+                "avg_percent": 51.0,
+                "max_percent": 92.4,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 89.1,
+                "max_percent": 93.3,
+                "peak_used_gb": 7.22
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 9.38,
+              "std_tokens_per_second": 0.19,
+              "min_tokens_per_second": 9.11,
+              "max_tokens_per_second": 9.53,
+              "avg_first_token_latency_s": 0.135,
+              "avg_inter_token_latency_ms": 106.49,
+              "avg_total_time_s": 27.2899,
+              "peak_memory_gb": 2.065,
+              "stability": "stable"
+            }
+          },
+          "Q8_0": {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "status": "completed",
+            "inference_mode": "server",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 36.4234,
+                "first_token_latency_s": 0.1527,
+                "tokens_per_second": 7.03,
+                "memory_before_gb": 2.157,
+                "memory_after_gb": 2.163,
+                "memory_delta_gb": 0.006,
+                "server_memory_gb": 2.101,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 142.24,
+                "p90_inter_token_latency_ms": 146.75
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 36.4614,
+                "first_token_latency_s": 0.1955,
+                "tokens_per_second": 7.02,
+                "memory_before_gb": 2.163,
+                "memory_after_gb": 2.17,
+                "memory_delta_gb": 0.007,
+                "server_memory_gb": 2.108,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 142.22,
+                "p90_inter_token_latency_ms": 148.56
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 36.9084,
+                "first_token_latency_s": 0.1545,
+                "tokens_per_second": 6.94,
+                "memory_before_gb": 2.17,
+                "memory_after_gb": 1.977,
+                "memory_delta_gb": -0.192,
+                "server_memory_gb": 1.946,
+                "error": null,
+                "success": true,
+                "inference_mode": "server",
+                "avg_inter_token_latency_ms": 144.13,
+                "p90_inter_token_latency_ms": 150.46
+              }
+            ],
+            "actual_file_size_gb": 1.09,
+            "model_load_time_s": 4.6,
+            "backend": {
+              "backend": "sycl",
+              "n_gpu_layers": -1,
+              "details": "Intel GPU détecté (Intel(R) Iris(R) Xe Graphics via pytorch_xpu), utilisation de SYCL",
+              "intel_device": "Intel(R) Iris(R) Xe Graphics",
+              "intel_vram_mb": 3273,
+              "inference_mode": "server",
+              "server_url": "http://127.0.0.1:8080"
+            },
+            "memory_after_load_gb": 2.264,
+            "server_memory_after_load_gb": 2.144,
+            "resource_usage": {
+              "n_samples": 175,
+              "duration_s": 109.6669659614563,
+              "cpu": {
+                "avg_percent": 56.4,
+                "max_percent": 99.4,
+                "min_percent": 0.0
+              },
+              "ram": {
+                "avg_percent": 88.4,
+                "max_percent": 94.2,
+                "peak_used_gb": 7.28
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 7.0,
+              "std_tokens_per_second": 0.04,
+              "min_tokens_per_second": 6.94,
+              "max_tokens_per_second": 7.03,
+              "avg_first_token_latency_s": 0.1676,
+              "avg_inter_token_latency_ms": 142.86,
+              "avg_total_time_s": 36.5977,
+              "peak_memory_gb": 2.17,
+              "stability": "stable"
+            }
+          }
+        },
+        "comparison_table": [
+          {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "tokens_per_second": 8.18,
+            "first_token_latency_s": 0.1297,
+            "inter_token_latency_ms": 122.69,
+            "peak_memory_gb": 1.365,
+            "model_load_time_s": 2.62,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.513,
+            "tokens_per_second": 8.9,
+            "first_token_latency_s": 0.1405,
+            "inter_token_latency_ms": 112.32,
+            "peak_memory_gb": 1.571,
+            "model_load_time_s": 3.6,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.623,
+            "tokens_per_second": 11.72,
+            "first_token_latency_s": 0.1056,
+            "inter_token_latency_ms": 85.32,
+            "peak_memory_gb": 1.737,
+            "model_load_time_s": 3.61,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.729,
+            "tokens_per_second": 6.04,
+            "first_token_latency_s": 0.1908,
+            "inter_token_latency_ms": 165.51,
+            "peak_memory_gb": 1.452,
+            "model_load_time_s": 3.62,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.842,
+            "tokens_per_second": 9.38,
+            "first_token_latency_s": 0.135,
+            "inter_token_latency_ms": 106.49,
+            "peak_memory_gb": 2.065,
+            "model_load_time_s": 3.61,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "tokens_per_second": 7.0,
+            "first_token_latency_s": 0.1676,
+            "inter_token_latency_ms": 142.86,
+            "peak_memory_gb": 2.17,
+            "model_load_time_s": 4.6,
+            "stability": "stable"
+          }
+        ]
+      }
+    }
+  }
+}
