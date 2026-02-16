@@ -538,26 +538,33 @@ def benchmark_gpu(
         device = torch.device("cuda")
         device_name = torch.cuda.get_device_name(0)
         backend = "CUDA"
-    elif hasattr(torch, "xpu") and torch.xpu.is_available():
-        device = torch.device("xpu")
-        try:
-            device_name = torch.xpu.get_device_name(0)
-        except Exception:
-            device_name = "Intel GPU (XPU)"
-        backend = "SYCL/XPU"
     else:
-        # Tenter d'activer XPU via intel-extension-for-pytorch (IPEX)
+        # Tester XPU (Intel) — enveloppé dans try/except car Level Zero
+        # peut crasher sur certains GPU intégrés (Iris, UHD)
         try:
-            import intel_extension_for_pytorch as ipex  # noqa: F401
             if hasattr(torch, "xpu") and torch.xpu.is_available():
                 device = torch.device("xpu")
                 try:
                     device_name = torch.xpu.get_device_name(0)
                 except Exception:
-                    device_name = "Intel GPU (XPU via IPEX)"
-                backend = "SYCL/XPU (IPEX)"
-        except ImportError:
-            pass
+                    device_name = "Intel GPU (XPU)"
+                backend = "SYCL/XPU"
+        except Exception:
+            pass  # Level Zero / driver crash — on continue
+
+        # Tenter d'activer XPU via intel-extension-for-pytorch (IPEX)
+        if device is None:
+            try:
+                import intel_extension_for_pytorch as ipex  # noqa: F401
+                if hasattr(torch, "xpu") and torch.xpu.is_available():
+                    device = torch.device("xpu")
+                    try:
+                        device_name = torch.xpu.get_device_name(0)
+                    except Exception:
+                        device_name = "Intel GPU (XPU via IPEX)"
+                    backend = "SYCL/XPU (IPEX)"
+            except Exception:
+                pass  # IPEX non installé ou Level Zero crash
 
     # MPS (Apple Silicon)
     if device is None:
@@ -611,75 +618,105 @@ def benchmark_gpu(
             result["advice"] = advice
         return result
 
-    sizes = [1024, 2048, 4096]
-    results = {}
-    total_steps = len(sizes) * 3
-    current_step = 0
+    # Exécuter les benchmarks GPU — enveloppé dans try/except pour
+    # attraper les crashs Level Zero / driver à l'exécution
+    try:
+        sizes = [1024, 2048, 4096]
+        results = {}
+        total_steps = len(sizes) * 3
+        current_step = 0
 
-    for size in sizes:
-        times = []
+        for size in sizes:
+            times = []
 
-        # Warmup
-        A = torch.randn(size, size, device=device, dtype=torch.float32)
-        B = torch.randn(size, size, device=device, dtype=torch.float32)
-        _ = torch.mm(A, B)
-        if device.type == "cuda":
-            torch.cuda.synchronize()
-        elif device.type == "xpu":
-            torch.xpu.synchronize()
-
-        for i in range(3):
+            # Warmup
             A = torch.randn(size, size, device=device, dtype=torch.float32)
             B = torch.randn(size, size, device=device, dtype=torch.float32)
-
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-            elif device.type == "xpu":
-                torch.xpu.synchronize()
-
-            start = time.perf_counter()
             _ = torch.mm(A, B)
-
             if device.type == "cuda":
                 torch.cuda.synchronize()
             elif device.type == "xpu":
                 torch.xpu.synchronize()
-            elif device.type == "mps":
-                # Synchronisation MPS
-                (A + B).cpu()
 
-            elapsed = time.perf_counter() - start
-            times.append(elapsed)
-            current_step += 1
+            for i in range(3):
+                A = torch.randn(size, size, device=device, dtype=torch.float32)
+                B = torch.randn(size, size, device=device, dtype=torch.float32)
 
-            if progress_callback:
-                progress_callback(current_step / total_steps, f"GPU - Matrice {size}x{size} ({i+1}/3)")
+                if device.type == "cuda":
+                    torch.cuda.synchronize()
+                elif device.type == "xpu":
+                    torch.xpu.synchronize()
 
-        gflops = (2 * size**3) / (np.mean(times) * 1e9)
-        results[f"{size}x{size}"] = {
-            "times_s": [round(t, 4) for t in times],
-            "mean_s": round(np.mean(times), 4),
-            "gflops": round(gflops, 2),
+                start = time.perf_counter()
+                _ = torch.mm(A, B)
+
+                if device.type == "cuda":
+                    torch.cuda.synchronize()
+                elif device.type == "xpu":
+                    torch.xpu.synchronize()
+                elif device.type == "mps":
+                    # Synchronisation MPS
+                    (A + B).cpu()
+
+                elapsed = time.perf_counter() - start
+                times.append(elapsed)
+                current_step += 1
+
+                if progress_callback:
+                    progress_callback(current_step / total_steps, f"GPU - Matrice {size}x{size} ({i+1}/3)")
+
+            gflops = (2 * size**3) / (np.mean(times) * 1e9)
+            results[f"{size}x{size}"] = {
+                "times_s": [round(t, 4) for t in times],
+                "mean_s": round(np.mean(times), 4),
+                "gflops": round(gflops, 2),
+            }
+
+            del A, B
+
+        # Nettoyer la mémoire GPU
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+        elif device.type == "xpu":
+            try:
+                torch.xpu.empty_cache()
+            except AttributeError:
+                pass
+
+        return {
+            "test": "GPU Compute",
+            "status": "completed",
+            "device": device_name,
+            "backend": backend,
+            "results": results,
         }
 
-        del A, B
+    except Exception as e:
+        error_msg = str(e)
+        # Erreur Level Zero typique sur GPU Intel intégrés
+        if "level_zero" in error_msg.lower() or "ur_result_error" in error_msg.lower():
+            reason = (
+                f"GPU {device_name} ({backend}) détecté, mais le driver Level Zero "
+                f"a échoué lors de l'exécution. Ce GPU intégré n'est peut-être pas "
+                f"entièrement compatible avec les opérations de calcul PyTorch XPU."
+            )
+            advice = (
+                "Les GPU Intel intégrés (Iris, UHD) ont un support XPU limité. "
+                "Seuls les GPU Intel Arc et Data Center ont un support complet. "
+                "Le benchmark IA via llama-server fonctionne indépendamment."
+            )
+        else:
+            reason = f"Erreur lors du benchmark GPU ({backend}): {error_msg}"
+            advice = ""
 
-    # Nettoyer la mémoire GPU
-    if device.type == "cuda":
-        torch.cuda.empty_cache()
-    elif device.type == "xpu":
-        try:
-            torch.xpu.empty_cache()
-        except AttributeError:
-            pass
-
-    return {
-        "test": "GPU Compute",
-        "status": "completed",
-        "device": device_name,
-        "backend": backend,
-        "results": results,
-    }
+        result = {
+            "test": "GPU Compute",
+            "status": "skipped",
+            "reason": reason,
+        }
+        if advice:
+            result["advice"] = advice
+        return result
 
 
 # =============================================================================
@@ -714,44 +751,68 @@ def run_all_classic_benchmarks(
 
     try:
         # Phase 1: CPU Single-Thread (0% - 30%)
-        if progress_callback:
-            progress_callback(0.0, "Nettoyage mémoire avant CPU Single-Thread...")
-        system_cleanup("CPU Single-Thread", verbose=False)
-        if progress_callback:
-            progress_callback(0.0, "Démarrage benchmark CPU Single-Thread...")
-        all_results["cpu_single_thread"] = benchmark_cpu_single_thread(
-            progress_callback=sub_progress(0.0, 0.30)
-        )
+        try:
+            if progress_callback:
+                progress_callback(0.0, "Nettoyage mémoire avant CPU Single-Thread...")
+            system_cleanup("CPU Single-Thread", verbose=False)
+            if progress_callback:
+                progress_callback(0.0, "Démarrage benchmark CPU Single-Thread...")
+            all_results["cpu_single_thread"] = benchmark_cpu_single_thread(
+                progress_callback=sub_progress(0.0, 0.30)
+            )
+        except Exception as e:
+            all_results["cpu_single_thread"] = {
+                "test": "CPU Single-Thread", "status": "error",
+                "error": str(e),
+            }
 
         # Phase 2: CPU Multi-Thread (30% - 60%)
-        if progress_callback:
-            progress_callback(0.30, "Nettoyage mémoire avant CPU Multi-Thread...")
-        system_cleanup("CPU Multi-Thread", verbose=False)
-        if progress_callback:
-            progress_callback(0.30, "Démarrage benchmark CPU Multi-Thread...")
-        all_results["cpu_multi_thread"] = benchmark_cpu_multi_thread(
-            progress_callback=sub_progress(0.30, 0.30)
-        )
+        try:
+            if progress_callback:
+                progress_callback(0.30, "Nettoyage mémoire avant CPU Multi-Thread...")
+            system_cleanup("CPU Multi-Thread", verbose=False)
+            if progress_callback:
+                progress_callback(0.30, "Démarrage benchmark CPU Multi-Thread...")
+            all_results["cpu_multi_thread"] = benchmark_cpu_multi_thread(
+                progress_callback=sub_progress(0.30, 0.30)
+            )
+        except Exception as e:
+            all_results["cpu_multi_thread"] = {
+                "test": "CPU Multi-Thread", "status": "error",
+                "error": str(e),
+            }
 
         # Phase 3: Mémoire (60% - 80%)
-        if progress_callback:
-            progress_callback(0.60, "Nettoyage mémoire avant benchmark Mémoire...")
-        system_cleanup("Mémoire", verbose=False)
-        if progress_callback:
-            progress_callback(0.60, "Démarrage benchmark Mémoire...")
-        all_results["memory_bandwidth"] = benchmark_memory_bandwidth(
-            progress_callback=sub_progress(0.60, 0.20)
-        )
+        try:
+            if progress_callback:
+                progress_callback(0.60, "Nettoyage mémoire avant benchmark Mémoire...")
+            system_cleanup("Mémoire", verbose=False)
+            if progress_callback:
+                progress_callback(0.60, "Démarrage benchmark Mémoire...")
+            all_results["memory_bandwidth"] = benchmark_memory_bandwidth(
+                progress_callback=sub_progress(0.60, 0.20)
+            )
+        except Exception as e:
+            all_results["memory_bandwidth"] = {
+                "test": "Memory Bandwidth", "status": "error",
+                "error": str(e),
+            }
 
         # Phase 4: GPU (80% - 100%)
-        if progress_callback:
-            progress_callback(0.80, "Nettoyage mémoire avant benchmark GPU...")
-        system_cleanup("GPU", verbose=False)
-        if progress_callback:
-            progress_callback(0.80, "Démarrage benchmark GPU...")
-        all_results["gpu_compute"] = benchmark_gpu(
-            progress_callback=sub_progress(0.80, 0.20)
-        )
+        try:
+            if progress_callback:
+                progress_callback(0.80, "Nettoyage mémoire avant benchmark GPU...")
+            system_cleanup("GPU", verbose=False)
+            if progress_callback:
+                progress_callback(0.80, "Démarrage benchmark GPU...")
+            all_results["gpu_compute"] = benchmark_gpu(
+                progress_callback=sub_progress(0.80, 0.20)
+            )
+        except Exception as e:
+            all_results["gpu_compute"] = {
+                "test": "GPU Compute", "status": "error",
+                "error": str(e),
+            }
 
     finally:
         # Arrêter le monitoring
