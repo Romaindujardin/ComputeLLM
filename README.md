@@ -120,10 +120,18 @@ pip install llama-cpp-python
 pip install torch torchvision
 ```
 
-#### Windows / Linux (CUDA)
+#### Windows / Linux (NVIDIA — CUDA)
 
 ```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+#### Windows / Linux (Intel GPU — XPU)
+
+Pour les GPU Intel (Iris Xe, Arc), installer la version XPU de PyTorch :
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu
 ```
 
 ### 5. Mode llama-server (sans compilation)
