@@ -245,7 +245,7 @@ class LlamaServerManager:
 
         # Démarrer le processus
         try:
-            # Rediriger stdout/stderr pour ne pas polluer le terminal
+            # Rediriger stdout/stderr pour capturer les logs du serveur
             kwargs = {
                 "stdout": subprocess.PIPE,
                 "stderr": subprocess.PIPE,
@@ -261,10 +261,38 @@ class LlamaServerManager:
                 f"Permission refusée pour exécuter {self.binary_path}. "
                 f"Sur macOS/Linux : chmod +x {self.binary_path}"
             )
+        except OSError as e:
+            # DLL manquante, exécutable invalide, etc.
+            raise RuntimeError(
+                f"Impossible de lancer llama-server : {e}\n"
+                "Sur Windows avec SYCL, vérifiez que les DLLs oneAPI sont accessibles :\n"
+                "  - Exécutez d'abord : \"C:\\Program Files (x86)\\Intel\\oneAPI\\setvars.bat\"\n"
+                "  - Ou ajoutez le dossier des DLLs SYCL au PATH système."
+            )
         except Exception as e:
             raise RuntimeError(f"Erreur lancement llama-server : {e}")
 
-        # Attendre que le serveur soit prêt
+        # Attendre que le serveur soit prêt (lecture stderr en parallèle)
+        import threading
+        import io
+
+        stderr_lines = []
+        stderr_lock = threading.Lock()
+
+        def _read_stderr():
+            """Lit stderr dans un thread séparé pour ne pas bloquer."""
+            try:
+                for raw_line in self._process.stderr:
+                    line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    if line:
+                        with stderr_lock:
+                            stderr_lines.append(line)
+            except (ValueError, OSError):
+                pass  # Pipe fermé
+
+        stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+        stderr_thread.start()
+
         timeout = LLAMA_SERVER_CONFIG["startup_timeout_s"]
         interval = LLAMA_SERVER_CONFIG["health_check_interval_s"]
         elapsed = 0.0
@@ -272,10 +300,12 @@ class LlamaServerManager:
         while elapsed < timeout:
             # Vérifier que le process est toujours vivant
             if self._process.poll() is not None:
-                stderr = self._process.stderr.read().decode("utf-8", errors="replace")
+                stderr_thread.join(timeout=2)
+                with stderr_lock:
+                    stderr_text = "\n".join(stderr_lines[-20:])  # 20 dernières lignes
                 raise RuntimeError(
                     f"llama-server s'est arrêté prématurément (code {self._process.returncode}).\n"
-                    f"Erreur : {stderr[:500]}"
+                    f"Sortie serveur :\n{stderr_text if stderr_text else '(aucune sortie)'}"
                 )
 
             if self.is_running():
@@ -288,13 +318,31 @@ class LlamaServerManager:
 
             if progress_callback:
                 p = min(elapsed / timeout, 0.95)
-                progress_callback(p, f"Attente llama-server... ({elapsed:.0f}s/{timeout}s)")
+                # Montrer la dernière ligne de stderr pour que l'utilisateur
+                # sache ce que fait le serveur (chargement modèle, compilation SYCL, etc.)
+                with stderr_lock:
+                    last_line = stderr_lines[-1] if stderr_lines else ""
+                if last_line:
+                    # Tronquer pour l'affichage
+                    display_line = last_line[:120] + "..." if len(last_line) > 120 else last_line
+                    progress_callback(p, f"Attente llama-server ({elapsed:.0f}s/{timeout}s) — {display_line}")
+                else:
+                    progress_callback(p, f"Attente llama-server... ({elapsed:.0f}s/{timeout}s)")
 
-        # Timeout
+        # Timeout — afficher la sortie serveur pour diagnostic
+        stderr_thread.join(timeout=2)
+        with stderr_lock:
+            stderr_text = "\n".join(stderr_lines[-30:])
+
         self.stop()
         raise TimeoutError(
-            f"llama-server n'a pas démarré en {timeout}s. "
-            "Le chargement du modèle peut prendre du temps pour les gros modèles."
+            f"llama-server n'a pas répondu en {timeout}s.\n"
+            "Causes possibles :\n"
+            "  - Le modèle est trop gros pour la mémoire disponible\n"
+            "  - La compilation SYCL prend plus de temps (1ère fois)\n"
+            "  - Le port {port} est déjà utilisé par un autre processus\n"
+            "  - Il manque des DLLs (oneAPI/SYCL)\n"
+            f"\nSortie serveur (dernières lignes) :\n{stderr_text if stderr_text else '(aucune sortie — le binaire ne produit peut-être pas de logs)'}"
         )
 
     def stop(self):
