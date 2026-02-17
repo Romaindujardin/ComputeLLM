@@ -4,11 +4,12 @@
 
 ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de différentes machines lors de l'inférence locale de modèles de langage, en mettant en évidence les différences d'architecture :
 
-| Architecture          | Exemple                     | Backend        |
-| --------------------- | --------------------------- | -------------- |
-| x86 + GPU dédié       | Intel/AMD + NVIDIA RTX      | CUDA           |
-| ARM + Mémoire unifiée | Apple Silicon (M1/M2/M3/M4) | Metal          |
-| CPU seul              | Tout processeur             | CPU (fallback) |
+| Architecture           | Exemple                     | Backend        |
+| ---------------------- | --------------------------- | -------------- |
+| x86 + GPU dédié NVIDIA | Intel/AMD CPU + NVIDIA RTX  | CUDA           |
+| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | ROCm           |
+| ARM + Mémoire unifiée  | Apple Silicon (M1/M2/M3/M4) | Metal          |
+| CPU seul               | Tout processeur             | CPU (fallback) |
 
 ---
 
@@ -106,6 +107,12 @@ CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python
 set CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 ```
 
+#### Linux (AMD GPU — ROCm / HIP)
+
+```bash
+CMAKE_ARGS="-DGGML_HIPBLAS=on" pip install llama-cpp-python
+```
+
 #### CPU uniquement (fallback)
 
 ```bash
@@ -124,6 +131,14 @@ pip install torch torchvision
 
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+#### Linux (AMD GPU — ROCm)
+
+Pour les GPU AMD (Radeon RX, Instinct), installer la version ROCm de PyTorch :
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
 ```
 
 #### Windows / Linux (Intel GPU — XPU)
@@ -566,35 +581,27 @@ Modifiez `src/config.py` pour ajuster :
 
 ### Haute priorité
 
-- [ ] **Détection matérielle**
-  - Ajouter la détection des GPU AMD :
-    - `rocm-smi` (Linux)
-    - `lspci` (fallback Linux)
-    - WMI / Win32_VideoController (Windows)
-  - Ajouter la détection des GPU Intel (Arc / XPU) :
-    - `xpu-smi`
-    - Level Zero
-    - `lspci` (Linux)
-    - WMI (Windows)
-  - Ajouter les backends détectés : `rocm`, `xpu`, `sycl`
+- [x] **Détection matérielle** — ✅ Support AMD complet
+  - ~~Ajouter la détection des GPU AMD~~ ✔️
+    - `rocm-smi` (Linux) ✔️
+    - `lspci` (fallback Linux) ✔️
+    - WMI / Win32_VideoController (Windows) ✔️
+    - PyTorch ROCm (`torch.version.hip`) ✔️
+  - ~~Ajouter la détection des GPU Intel (Arc / XPU)~~ ✔️
+  - ~~Ajouter les backends détectés : `rocm`, `xpu`, `sycl`~~ ✔️
 
-- [ ] **Benchmark classique GPU**
-  - Support explicite AMD ROCm (identifier via `torch.version.hip`)
-  - Support Intel XPU (`torch.xpu.is_available()`)
-  - Synchronisation adaptée par device :
-    - `torch.cuda.synchronize()`
-    - `torch.xpu.synchronize()`
-    - `torch.mps.synchronize()`
-  - Ajouter monitoring :
-    - AMD : `rocm-smi --showuse --showmemuse --showtemp`
-    - Intel : `xpu-smi dump` / `intel_gpu_top`
-  - Distinguer CUDA vs ROCm dans l’affichage des résultats
+- [x] **Benchmark classique GPU** — ✅ Support AMD complet
+  - ~~Support explicite AMD ROCm (identifier via `torch.version.hip`)~~ ✔️
+  - ~~Support Intel XPU (`torch.xpu.is_available()`)~~ ✔️
+  - ~~Synchronisation adaptée par device~~ ✔️ (ROCm utilise `torch.cuda.synchronize()`)
+  - ~~Ajouter monitoring AMD : `rocm-smi --showuse --showmemuse --showtemp`~~ ✔️
+  - ~~Distinguer CUDA vs ROCm dans l’affichage des résultats~~ ✔️
 
 - [ ] **Benchmark AI / LLM**
   - Étendre `detect_best_backend()` :
-    - ROCm (HIPBLAS)
+    - ~~ROCm (HIPBLAS)~~ ✔️
     - Vulkan
-    - SYCL (Intel)
+    - ~~SYCL (Intel)~~ ✔️
     - CLBlast / OpenCL (fallback générique)
   - Gérer explicitement les backends llama-cpp-python :
     - `-DGGML_CUDA=on`
@@ -614,7 +621,7 @@ Modifiez `src/config.py` pour ajuster :
   - Ajouter un script d’installation automatique par OS
   - Afficher un avertissement si version CPU-only détectée - ~~Mode llama-server comme alternative sans compilation~~ ✅
 - [ ] **Monitoring unifié**
-  - Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`
+  - ~~Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`~~ ✔️
   - Normaliser le format des métriques (utilisation %, VRAM, température)
 
 ---

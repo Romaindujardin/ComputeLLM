@@ -259,7 +259,7 @@ def detect_best_backend() -> Dict[str, Any]:
     """
     Détecte le meilleur backend disponible pour l'inférence.
     Retourne des informations sur le backend sélectionné.
-    Supporte : CUDA (NVIDIA), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
+    Supporte : CUDA (NVIDIA), ROCm (AMD), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
     """
     system = platform.system()
     machine = platform.machine()
@@ -270,7 +270,7 @@ def detect_best_backend() -> Dict[str, Any]:
         "details": "",
     }
 
-    # Vérifier CUDA (Windows/Linux)
+    # Vérifier CUDA / ROCm (NVIDIA ou AMD)
     try:
         import subprocess
         nvidia_check = subprocess.run(
@@ -282,6 +282,28 @@ def detect_best_backend() -> Dict[str, Any]:
             result["details"] = "NVIDIA GPU détecté, utilisation de CUDA"
             return result
     except (FileNotFoundError, Exception):
+        pass
+
+    # Vérifier AMD GPU / ROCm (HIP)
+    # Réutilise _detect_amd_gpu() de hardware_detect pour la cohérence
+    try:
+        from src.hardware_detect import _detect_amd_gpu
+        amd_gpu = _detect_amd_gpu()
+        if amd_gpu:
+            gpu_name = amd_gpu.get("name", "AMD GPU")
+            detected_via = amd_gpu.get("detected_via", "unknown")
+            result["backend"] = "rocm"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"AMD GPU détecté ({gpu_name} via {detected_via}), utilisation de ROCm/HIP"
+            result["amd_device"] = gpu_name
+            if "vram_total_mb" in amd_gpu:
+                result["amd_vram_mb"] = amd_gpu["vram_total_mb"]
+            if "hip_version" in amd_gpu:
+                result["hip_version"] = amd_gpu["hip_version"]
+            if "driver_version" in amd_gpu:
+                result["driver_version"] = amd_gpu["driver_version"]
+            return result
+    except Exception:
         pass
 
     # Vérifier Intel GPU / SYCL (Windows/Linux)
@@ -338,6 +360,7 @@ def _load_model(model_path: str, backend_info: Dict[str, Any], n_ctx: int = 2048
             "Installation :\n"
             "  macOS (Metal) : CMAKE_ARGS=\"-DGGML_METAL=on\" pip install llama-cpp-python\n"
             "  Windows (CUDA): CMAKE_ARGS=\"-DGGML_CUDA=on\" pip install llama-cpp-python\n"
+            "  AMD (ROCm)    : CMAKE_ARGS=\"-DGGML_HIPBLAS=on\" pip install llama-cpp-python\n"
             "  Intel (SYCL)  : CMAKE_ARGS=\"-DGGML_SYCL=on\" pip install llama-cpp-python\n"
             "  CPU only      : pip install llama-cpp-python\n"
             "\n"

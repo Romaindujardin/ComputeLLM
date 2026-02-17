@@ -180,6 +180,14 @@ def detect_gpu() -> Dict[str, Any]:
         info["backends"].append("cuda")
         info["primary_backend"] = "cuda"
 
+    # --- Détection AMD / ROCm ---
+    amd_gpu = _detect_amd_gpu()
+    if amd_gpu:
+        info["gpus"].append(amd_gpu)
+        info["backends"].append("rocm")
+        if info["primary_backend"] == "cpu":
+            info["primary_backend"] = "rocm"
+
     # --- Détection Intel GPU / SYCL ---
     intel_gpu = _detect_intel_gpu()
     if intel_gpu:
@@ -271,6 +279,168 @@ def _detect_metal_gpu() -> Optional[Dict[str, Any]]:
                 return gpu_info
     except Exception:
         pass
+    return None
+
+
+def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
+    """
+    Détecte un GPU AMD (Radeon RX, Radeon Pro, Instinct) via
+    plusieurs méthodes : PyTorch ROCm, rocm-smi, lspci, WMI (Windows).
+    """
+    system = platform.system()
+
+    # Méthode 1 : PyTorch ROCm (torch.version.hip)
+    try:
+        import torch
+        if torch.cuda.is_available() and hasattr(torch.version, "hip") and torch.version.hip:
+            name = "AMD GPU"
+            try:
+                name = torch.cuda.get_device_name(0)
+            except Exception:
+                pass
+            gpu_info = {
+                "type": "AMD",
+                "name": name,
+                "backend": "rocm",
+                "detected_via": "pytorch_rocm",
+                "hip_version": torch.version.hip,
+            }
+            try:
+                mem_total = torch.cuda.get_device_properties(0).total_mem
+                gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
+            except Exception:
+                pass
+            return gpu_info
+    except ImportError:
+        pass
+
+    # Méthode 2 : rocm-smi (Linux avec pilotes AMD ROCm)
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showproductname", "--showmeminfo", "vram",
+             "--showdriverversion", "--csv"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            output = result.stdout
+            gpu_info = {
+                "type": "AMD",
+                "name": "AMD GPU",
+                "backend": "rocm",
+                "detected_via": "rocm-smi",
+            }
+            # Parser le CSV rocm-smi
+            for line in output.strip().split("\n"):
+                lower = line.lower()
+                # Chercher le nom du GPU
+                if "card series" in lower or "product name" in lower:
+                    parts = line.split(",")
+                    if len(parts) >= 2 and parts[1].strip():
+                        gpu_info["name"] = parts[1].strip()
+                # Chercher la VRAM totale
+                if "vram total" in lower:
+                    parts = line.split(",")
+                    if len(parts) >= 2:
+                        try:
+                            # rocm-smi retourne la VRAM en bytes
+                            vram_bytes = int(parts[1].strip())
+                            gpu_info["vram_total_mb"] = round(vram_bytes / (1024**2))
+                        except (ValueError, IndexError):
+                            pass
+                # Chercher la version du driver
+                if "driver version" in lower:
+                    parts = line.split(",")
+                    if len(parts) >= 2 and parts[1].strip():
+                        gpu_info["driver_version"] = parts[1].strip()
+            return gpu_info
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Méthode 2b : rocm-smi format texte simple (fallback)
+    try:
+        result = subprocess.run(
+            ["rocm-smi"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and "GPU" in result.stdout:
+            gpu_info = {
+                "type": "AMD",
+                "name": "AMD GPU (ROCm)",
+                "backend": "rocm",
+                "detected_via": "rocm-smi",
+            }
+            # Essayer d'extraire le nom du GPU
+            name_result = subprocess.run(
+                ["rocm-smi", "--showproductname"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if name_result.returncode == 0:
+                for lr in name_result.stdout.strip().split("\n"):
+                    if ":" in lr and ("card" in lr.lower() or "series" in lr.lower()):
+                        gpu_info["name"] = lr.split(":", 1)[1].strip()
+                        break
+            return gpu_info
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    # Méthode 3 : lspci (Linux)
+    amd_gpu_keywords = ["radeon", "navi", "vega", "polaris", "ellesmere",
+                        "instinct", "rx ", "w6", "w7", "firepro"]
+    if system == "Linux":
+        try:
+            result = subprocess.run(
+                ["lspci", "-nn"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    lower = line.lower()
+                    if ("vga" in lower or "3d" in lower or "display" in lower):
+                        if ("amd" in lower or "ati" in lower or "advanced micro" in lower) \
+                           and any(kw in lower for kw in amd_gpu_keywords):
+                            name_match = re.search(r"(?:AMD|ATI|Advanced Micro Devices).*?(?:\[|$)", line, re.IGNORECASE)
+                            name = name_match.group(0).rstrip("[").strip() if name_match else "AMD GPU"
+                            return {
+                                "type": "AMD",
+                                "name": name,
+                                "backend": "rocm",
+                                "detected_via": "lspci",
+                            }
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    # Méthode 4 : WMI / PowerShell (Windows)
+    if system == "Windows":
+        try:
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 "Get-CimInstance Win32_VideoController | Select-Object Name, AdapterRAM, DriverVersion | ConvertTo-Json"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                data = json.loads(result.stdout)
+                if isinstance(data, dict):
+                    data = [data]
+                for gpu in data:
+                    name = gpu.get("Name", "").lower()
+                    if ("amd" in name or "radeon" in name or "ati" in name) \
+                       and any(kw in name for kw in amd_gpu_keywords):
+                        gpu_info = {
+                            "type": "AMD",
+                            "name": gpu.get("Name", "AMD GPU"),
+                            "backend": "rocm",
+                            "detected_via": "wmi",
+                        }
+                        adapter_ram = gpu.get("AdapterRAM")
+                        if adapter_ram and adapter_ram > 0:
+                            gpu_info["vram_total_mb"] = round(adapter_ram / (1024**2))
+                        driver = gpu.get("DriverVersion")
+                        if driver:
+                            gpu_info["driver_version"] = driver
+                        return gpu_info
+        except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
+
     return None
 
 
@@ -430,6 +600,18 @@ def _detect_python_backends() -> Dict[str, bool]:
             backends["llama_server_path"] = server_path
     except ImportError:
         backends["llama_server"] = False
+
+    # ROCm (AMD) — torch.version.hip est set si PyTorch est compilé avec ROCm
+    try:
+        import torch
+        if hasattr(torch.version, "hip") and torch.version.hip:
+            backends["pytorch_rocm"] = True
+            backends["pytorch_hip_version"] = torch.version.hip
+        else:
+            backends["pytorch_rocm"] = False
+    except (ImportError, Exception):
+        if "pytorch_rocm" not in backends:
+            backends["pytorch_rocm"] = False
 
     # Intel Extension for PyTorch (IPEX)
     try:

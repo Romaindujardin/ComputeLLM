@@ -9,6 +9,7 @@ import threading
 import multiprocessing
 import platform
 import gc
+import re
 import subprocess
 import sys
 from typing import Dict, Any, List, Optional, Callable
@@ -202,10 +203,15 @@ class ResourceMonitor:
                 if gpu_usage:
                     sample.update(gpu_usage)
                 else:
-                    # Monitoring GPU Intel si disponible
-                    intel_usage = self._sample_intel_gpu()
-                    if intel_usage:
-                        sample.update(intel_usage)
+                    # Monitoring GPU AMD si disponible
+                    amd_usage = self._sample_amd_gpu()
+                    if amd_usage:
+                        sample.update(amd_usage)
+                    else:
+                        # Monitoring GPU Intel si disponible
+                        intel_usage = self._sample_intel_gpu()
+                        if intel_usage:
+                            sample.update(intel_usage)
 
                 self.samples.append(sample)
             except Exception:
@@ -215,6 +221,13 @@ class ResourceMonitor:
 
     def _sample_nvidia_gpu(self) -> Optional[Dict[str, Any]]:
         """Échantillonne l'utilisation GPU NVIDIA via nvidia-smi."""
+        # Ignorer nvidia-smi si on est sur ROCm (AMD)
+        try:
+            import torch
+            if hasattr(torch.version, "hip") and torch.version.hip:
+                return None
+        except (ImportError, Exception):
+            pass
         try:
             import subprocess
             result = subprocess.run(
@@ -230,6 +243,69 @@ class ResourceMonitor:
                         "gpu_memory_used_mb": float(parts[1]),
                         "gpu_memory_total_mb": float(parts[2]),
                         "gpu_temperature_c": float(parts[3]),
+                    }
+        except (FileNotFoundError, Exception):
+            pass
+        return None
+
+    def _sample_amd_gpu(self) -> Optional[Dict[str, Any]]:
+        """Échantillonne l'utilisation GPU AMD via rocm-smi."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["rocm-smi", "--showuse", "--showmemuse", "--showtemp", "--csv"],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                gpu_data: Dict[str, Any] = {}
+                for line in lines:
+                    lower = line.lower()
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) < 2:
+                        continue
+                    val_str = parts[1].strip().rstrip('%')
+                    if "gpu use" in lower or "gpu busy" in lower:
+                        try:
+                            gpu_data["gpu_utilization_percent"] = float(val_str)
+                        except ValueError:
+                            pass
+                    elif "vram use" in lower or "gpu memory use" in lower:
+                        try:
+                            gpu_data["gpu_memory_used_mb"] = float(val_str)
+                        except ValueError:
+                            pass
+                    elif "temperature" in lower or "temp" in lower:
+                        try:
+                            gpu_data["gpu_temperature_c"] = float(val_str)
+                        except ValueError:
+                            pass
+                if "gpu_utilization_percent" in gpu_data:
+                    # Assurer des valeurs par défaut
+                    gpu_data.setdefault("gpu_memory_used_mb", 0.0)
+                    gpu_data.setdefault("gpu_temperature_c", 0.0)
+                    return gpu_data
+        except (FileNotFoundError, Exception):
+            pass
+        # Fallback: rocm-smi showgpuuse format texte
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["rocm-smi", "-u"],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                usage = 0.0
+                for line in result.stdout.strip().split('\n'):
+                    if "gpu use" in line.lower() or "busy" in line.lower():
+                        match = re.search(r'(\d+\.?\d*)', line)
+                        if match:
+                            usage = float(match.group(1))
+                if usage > 0:
+                    return {
+                        "gpu_utilization_percent": usage,
+                        "gpu_memory_used_mb": 0.0,
+                        "gpu_temperature_c": 0.0,
                     }
         except (FileNotFoundError, Exception):
             pass
@@ -537,7 +613,11 @@ def benchmark_gpu(
     if torch.cuda.is_available():
         device = torch.device("cuda")
         device_name = torch.cuda.get_device_name(0)
-        backend = "CUDA"
+        # Distinguer AMD ROCm (HIP) de NVIDIA CUDA
+        if hasattr(torch.version, "hip") and torch.version.hip:
+            backend = f"ROCm/HIP {torch.version.hip}"
+        else:
+            backend = "CUDA"
     else:
         # Tester XPU (Intel) — enveloppé dans try/except car Level Zero
         # peut crasher sur certains GPU intégrés (Iris, UHD)
@@ -575,39 +655,72 @@ def benchmark_gpu(
 
     # Aucun backend GPU trouvé — message d'aide contextuel
     if device is None:
-        reason = "Aucun GPU compatible (CUDA/XPU/MPS) détecté"
+        reason = "Aucun GPU compatible (CUDA/ROCm/XPU/MPS) détecté"
         advice = ""
 
-        # Vérifier si un GPU Intel est physiquement présent
+        # Vérifier si un GPU AMD est physiquement présent
         try:
-            from src.hardware_detect import _detect_intel_gpu
-            intel_gpu = _detect_intel_gpu()
-            if intel_gpu:
-                gpu_name = intel_gpu.get("name", "Intel GPU")
-                # Vérifier si PyTorch est un build CUDA (inutile sur Intel)
+            from src.hardware_detect import _detect_amd_gpu
+            amd_gpu = _detect_amd_gpu()
+            if amd_gpu:
+                gpu_name = amd_gpu.get("name", "AMD GPU")
                 torch_version = getattr(torch, "__version__", "")
                 if "+cu" in torch_version or "cuda" in torch_version.lower():
                     reason = (
-                        f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
+                        f"GPU AMD ({gpu_name}) détecté, mais votre PyTorch "
                         f"({torch_version}) est compilé pour CUDA (NVIDIA)."
                     )
                     advice = (
-                        "Pour benchmarker votre GPU Intel, installez PyTorch "
-                        "avec le support XPU et intel-extension-for-pytorch :\n"
-                        "pip install intel-extension-for-pytorch"
+                        "Pour benchmarker votre GPU AMD, installez PyTorch "
+                        "avec le support ROCm :\n"
+                        "pip install torch torchvision torchaudio "
+                        "--index-url https://download.pytorch.org/whl/rocm6.2"
                     )
                 else:
                     reason = (
-                        f"GPU Intel ({gpu_name}) détecté, mais PyTorch n'a pas "
-                        f"le support XPU activé."
+                        f"GPU AMD ({gpu_name}) détecté, mais PyTorch n'a pas "
+                        f"le support ROCm activé."
                     )
                     advice = (
-                        "Installez intel-extension-for-pytorch pour activer "
-                        "le support GPU Intel :\n"
-                        "pip install intel-extension-for-pytorch"
+                        "Installez PyTorch avec le support ROCm pour activer "
+                        "le support GPU AMD :\n"
+                        "pip install torch torchvision torchaudio "
+                        "--index-url https://download.pytorch.org/whl/rocm6.2"
                     )
         except Exception:
             pass
+
+        # Vérifier si un GPU Intel est physiquement présent
+        if not advice:
+            try:
+                from src.hardware_detect import _detect_intel_gpu
+                intel_gpu = _detect_intel_gpu()
+                if intel_gpu:
+                    gpu_name = intel_gpu.get("name", "Intel GPU")
+                    # Vérifier si PyTorch est un build CUDA (inutile sur Intel)
+                    torch_version = getattr(torch, "__version__", "")
+                    if "+cu" in torch_version or "cuda" in torch_version.lower():
+                        reason = (
+                            f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
+                            f"({torch_version}) est compilé pour CUDA (NVIDIA)."
+                        )
+                        advice = (
+                            "Pour benchmarker votre GPU Intel, installez PyTorch "
+                            "avec le support XPU et intel-extension-for-pytorch :\n"
+                            "pip install intel-extension-for-pytorch"
+                        )
+                    else:
+                        reason = (
+                            f"GPU Intel ({gpu_name}) détecté, mais PyTorch n'a pas "
+                            f"le support XPU activé."
+                        )
+                        advice = (
+                            "Installez intel-extension-for-pytorch pour activer "
+                            "le support GPU Intel :\n"
+                            "pip install intel-extension-for-pytorch"
+                        )
+            except Exception:
+                pass
 
         result = {
             "test": "GPU Compute",

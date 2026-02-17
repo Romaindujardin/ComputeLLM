@@ -268,9 +268,10 @@ def page_hardware():
         if py_backends.get("pytorch"):
             ver = py_backends.get("pytorch_version", "")
             cuda_str = f" (CUDA {py_backends['pytorch_cuda_version']})" if py_backends.get("pytorch_cuda") else ""
+            rocm_str = f" (ROCm {py_backends['pytorch_hip_version']})" if py_backends.get("pytorch_rocm") else ""
             mps_str = " (MPS)" if py_backends.get("pytorch_mps") else ""
             xpu_str = " (XPU)" if py_backends.get("pytorch_xpu") else ""
-            py_cols[1].success(f"PyTorch {ver}{cuda_str}{mps_str}{xpu_str}")
+            py_cols[1].success(f"PyTorch {ver}{cuda_str}{rocm_str}{mps_str}{xpu_str}")
         else:
             py_cols[1].warning("PyTorch non installé (GPU benchmark indisponible)")
 
@@ -285,6 +286,8 @@ def page_hardware():
             py_cols[3].success(f"IPEX {py_backends.get('ipex_version', '')}")
         elif py_backends.get("pytorch_xpu"):
             py_cols[3].info("IPEX non détecté (XPU via PyTorch)")
+        elif py_backends.get("pytorch_rocm"):
+            py_cols[3].success(f"ROCm/HIP {py_backends.get('pytorch_hip_version', '')}")
 
     # Modèles compatibles
     st.markdown("---")
