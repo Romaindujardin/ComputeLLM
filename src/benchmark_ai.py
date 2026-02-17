@@ -255,11 +255,15 @@ def download_model(
 # Détection du backend optimal
 # =============================================================================
 
-def detect_best_backend() -> Dict[str, Any]:
+def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Détecte le meilleur backend disponible pour l'inférence.
     Retourne des informations sur le backend sélectionné.
     Supporte : CUDA (NVIDIA), ROCm (AMD), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
+
+    Args:
+        selected_gpu: (Optionnel) Dict GPU provenant de detect_all_gpus().
+                     Si fourni, utilise ce GPU au lieu de l'auto-détection.
     """
     system = platform.system()
     machine = platform.machine()
@@ -269,6 +273,48 @@ def detect_best_backend() -> Dict[str, Any]:
         "n_gpu_layers": 0,
         "details": "",
     }
+
+    # Si un GPU est explicitement sélectionné par l'utilisateur
+    if selected_gpu is not None:
+        backend = selected_gpu.get("backend", "cpu")
+        gpu_name = selected_gpu.get("name", "GPU")
+
+        if backend == "cuda":
+            result["backend"] = "cuda"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (CUDA)"
+            return result
+        elif backend == "rocm":
+            result["backend"] = "rocm"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (ROCm/HIP)"
+            result["amd_device"] = gpu_name
+            if "vram_total_mb" in selected_gpu:
+                result["amd_vram_mb"] = selected_gpu["vram_total_mb"]
+            if "hip_version" in selected_gpu:
+                result["hip_version"] = selected_gpu["hip_version"]
+            if "driver_version" in selected_gpu:
+                result["driver_version"] = selected_gpu["driver_version"]
+            return result
+        elif backend == "sycl":
+            result["backend"] = "sycl"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (SYCL)"
+            result["intel_device"] = gpu_name
+            if "vram_total_mb" in selected_gpu:
+                result["intel_vram_mb"] = selected_gpu["vram_total_mb"]
+            return result
+        elif backend == "metal":
+            result["backend"] = "metal"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (Metal)"
+            return result
+        else:
+            # CPU explicitement choisi
+            result["details"] = f"CPU sélectionné (pas d'accélération GPU)"
+            return result
+
+    # === Auto-détection (comportement original) ===
 
     # Vérifier CUDA / ROCm (NVIDIA ou AMD)
     try:
@@ -288,8 +334,9 @@ def detect_best_backend() -> Dict[str, Any]:
     # Réutilise _detect_amd_gpu() de hardware_detect pour la cohérence
     try:
         from src.hardware_detect import _detect_amd_gpu
-        amd_gpu = _detect_amd_gpu()
-        if amd_gpu:
+        amd_gpus = _detect_amd_gpu()
+        if amd_gpus:
+            amd_gpu = amd_gpus[0]  # Prendre le premier par défaut
             gpu_name = amd_gpu.get("name", "AMD GPU")
             detected_via = amd_gpu.get("detected_via", "unknown")
             result["backend"] = "rocm"
@@ -310,8 +357,9 @@ def detect_best_backend() -> Dict[str, Any]:
     # Réutilise _detect_intel_gpu() de hardware_detect pour la cohérence
     try:
         from src.hardware_detect import _detect_intel_gpu
-        intel_gpu = _detect_intel_gpu()
-        if intel_gpu:
+        intel_gpus = _detect_intel_gpu()
+        if intel_gpus:
+            intel_gpu = intel_gpus[0]  # Prendre le premier par défaut
             gpu_name = intel_gpu.get("name", "Intel GPU")
             detected_via = intel_gpu.get("detected_via", "unknown")
             result["backend"] = "sycl"
@@ -494,6 +542,7 @@ def run_single_inference(
 def benchmark_model(
     model_key: str,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute le benchmark complet pour un modèle donné.
@@ -535,7 +584,7 @@ def benchmark_model(
         model_path = download_model(model_key, progress_callback=None)
 
         # Étape 2: Détection du backend
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -625,6 +674,7 @@ def benchmark_single_quantization(
     model_key: str,
     quant_key: str,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute le benchmark pour une variante de quantification spécifique.
@@ -682,7 +732,7 @@ def benchmark_single_quantization(
         result["actual_file_size_gb"] = round(actual_size_gb, 3)
 
         # Backend
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -779,6 +829,7 @@ def run_quantization_comparison(
     model_key: str,
     quant_keys: List[str],
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute un benchmark comparatif de toutes les quantifications sélectionnées
@@ -827,6 +878,7 @@ def run_quantization_comparison(
             model_key,
             quant_key,
             progress_callback=quant_progress,
+            selected_gpu=selected_gpu,
         )
 
     elapsed = time.time() - start_time

@@ -162,8 +162,8 @@ def _detect_cpu_linux() -> Dict[str, Any]:
 
 def detect_gpu() -> Dict[str, Any]:
     """
-    Détecte le GPU et les backends disponibles.
-    Supporte NVIDIA (CUDA), Apple (Metal), et CPU fallback.
+    Détecte tous les GPUs et les backends disponibles.
+    Supporte NVIDIA (CUDA), AMD (ROCm), Intel (SYCL), Apple (Metal), et CPU fallback.
     """
     info: Dict[str, Any] = {
         "gpus": [],
@@ -174,25 +174,28 @@ def detect_gpu() -> Dict[str, Any]:
     system = platform.system()
 
     # --- Détection NVIDIA / CUDA ---
-    nvidia_gpu = _detect_nvidia_gpu()
-    if nvidia_gpu:
-        info["gpus"].append(nvidia_gpu)
-        info["backends"].append("cuda")
+    nvidia_gpus = _detect_nvidia_gpu()
+    if nvidia_gpus:
+        info["gpus"].extend(nvidia_gpus)
+        if "cuda" not in info["backends"]:
+            info["backends"].append("cuda")
         info["primary_backend"] = "cuda"
 
     # --- Détection AMD / ROCm ---
-    amd_gpu = _detect_amd_gpu()
-    if amd_gpu:
-        info["gpus"].append(amd_gpu)
-        info["backends"].append("rocm")
+    amd_gpus = _detect_amd_gpu()
+    if amd_gpus:
+        info["gpus"].extend(amd_gpus)
+        if "rocm" not in info["backends"]:
+            info["backends"].append("rocm")
         if info["primary_backend"] == "cpu":
             info["primary_backend"] = "rocm"
 
     # --- Détection Intel GPU / SYCL ---
-    intel_gpu = _detect_intel_gpu()
-    if intel_gpu:
-        info["gpus"].append(intel_gpu)
-        info["backends"].append("sycl")
+    intel_gpus = _detect_intel_gpu()
+    if intel_gpus:
+        info["gpus"].extend(intel_gpus)
+        if "sycl" not in info["backends"]:
+            info["backends"].append("sycl")
         if info["primary_backend"] == "cpu":
             info["primary_backend"] = "sycl"
 
@@ -205,6 +208,10 @@ def detect_gpu() -> Dict[str, Any]:
             if info["primary_backend"] == "cpu":
                 info["primary_backend"] = "metal"
 
+    # --- Ajouter un index global à chaque GPU ---
+    for idx, gpu in enumerate(info["gpus"]):
+        gpu["gpu_index"] = idx
+
     # --- CPU fallback toujours disponible ---
     info["backends"].append("cpu")
 
@@ -212,6 +219,15 @@ def detect_gpu() -> Dict[str, Any]:
     info["python_backends"] = _detect_python_backends()
 
     return info
+
+
+def detect_all_gpus() -> list:
+    """
+    Retourne une liste plate de tous les GPUs détectés, chacun avec un champ
+    'gpu_index' (0-based). Utile pour les sélecteurs UI.
+    """
+    gpu_info = detect_gpu()
+    return gpu_info.get("gpus", [])
 
 
 def _detect_nvidia_gpu() -> Optional[Dict[str, Any]]:
@@ -282,35 +298,42 @@ def _detect_metal_gpu() -> Optional[Dict[str, Any]]:
     return None
 
 
-def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
+def _detect_amd_gpu() -> list:
     """
-    Détecte un GPU AMD (Radeon RX, Radeon Pro, Instinct) via
+    Détecte tous les GPUs AMD (Radeon RX, Radeon Pro, Instinct) via
     plusieurs méthodes : PyTorch ROCm, rocm-smi, lspci, WMI (Windows).
+    Retourne une liste de dicts.
     """
     system = platform.system()
 
-    # Méthode 1 : PyTorch ROCm (torch.version.hip)
+    # Méthode 1 : PyTorch ROCm (torch.version.hip) — énumère tous les devices
     try:
         import torch
         if torch.cuda.is_available() and hasattr(torch.version, "hip") and torch.version.hip:
-            name = "AMD GPU"
-            try:
-                name = torch.cuda.get_device_name(0)
-            except Exception:
-                pass
-            gpu_info = {
-                "type": "AMD",
-                "name": name,
-                "backend": "rocm",
-                "detected_via": "pytorch_rocm",
-                "hip_version": torch.version.hip,
-            }
-            try:
-                mem_total = torch.cuda.get_device_properties(0).total_mem
-                gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
-            except Exception:
-                pass
-            return gpu_info
+            gpus = []
+            device_count = torch.cuda.device_count()
+            for i in range(device_count):
+                name = "AMD GPU"
+                try:
+                    name = torch.cuda.get_device_name(i)
+                except Exception:
+                    pass
+                gpu_info = {
+                    "type": "AMD",
+                    "name": name,
+                    "backend": "rocm",
+                    "detected_via": "pytorch_rocm",
+                    "hip_version": torch.version.hip,
+                    "device_index": i,
+                }
+                try:
+                    mem_total = torch.cuda.get_device_properties(i).total_mem
+                    gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
+                except Exception:
+                    pass
+                gpus.append(gpu_info)
+            if gpus:
+                return gpus
     except ImportError:
         pass
 
@@ -332,27 +355,23 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
             # Parser le CSV rocm-smi
             for line in output.strip().split("\n"):
                 lower = line.lower()
-                # Chercher le nom du GPU
                 if "card series" in lower or "product name" in lower:
                     parts = line.split(",")
                     if len(parts) >= 2 and parts[1].strip():
                         gpu_info["name"] = parts[1].strip()
-                # Chercher la VRAM totale
                 if "vram total" in lower:
                     parts = line.split(",")
                     if len(parts) >= 2:
                         try:
-                            # rocm-smi retourne la VRAM en bytes
                             vram_bytes = int(parts[1].strip())
                             gpu_info["vram_total_mb"] = round(vram_bytes / (1024**2))
                         except (ValueError, IndexError):
                             pass
-                # Chercher la version du driver
                 if "driver version" in lower:
                     parts = line.split(",")
                     if len(parts) >= 2 and parts[1].strip():
                         gpu_info["driver_version"] = parts[1].strip()
-            return gpu_info
+            return [gpu_info]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
@@ -369,7 +388,6 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                 "backend": "rocm",
                 "detected_via": "rocm-smi",
             }
-            # Essayer d'extraire le nom du GPU
             name_result = subprocess.run(
                 ["rocm-smi", "--showproductname"],
                 capture_output=True, text=True, timeout=10,
@@ -379,11 +397,11 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                     if ":" in lr and ("card" in lr.lower() or "series" in lr.lower()):
                         gpu_info["name"] = lr.split(":", 1)[1].strip()
                         break
-            return gpu_info
+            return [gpu_info]
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
-    # Méthode 3 : lspci (Linux)
+    # Méthode 3 : lspci (Linux) — collecte tous les GPUs AMD
     amd_gpu_keywords = ["radeon", "navi", "vega", "polaris", "ellesmere",
                         "instinct", "rx ", "w6", "w7", "firepro"]
     if system == "Linux":
@@ -393,6 +411,7 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                 capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0:
+                gpus = []
                 for line in result.stdout.strip().split("\n"):
                     lower = line.lower()
                     if ("vga" in lower or "3d" in lower or "display" in lower):
@@ -400,16 +419,18 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                            and any(kw in lower for kw in amd_gpu_keywords):
                             name_match = re.search(r"(?:AMD|ATI|Advanced Micro Devices).*?(?:\[|$)", line, re.IGNORECASE)
                             name = name_match.group(0).rstrip("[").strip() if name_match else "AMD GPU"
-                            return {
+                            gpus.append({
                                 "type": "AMD",
                                 "name": name,
                                 "backend": "rocm",
                                 "detected_via": "lspci",
-                            }
+                            })
+                if gpus:
+                    return gpus
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-    # Méthode 4 : WMI / PowerShell (Windows)
+    # Méthode 4 : WMI / PowerShell (Windows) — collecte tous les GPUs AMD
     if system == "Windows":
         try:
             result = subprocess.run(
@@ -421,6 +442,7 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                 data = json.loads(result.stdout)
                 if isinstance(data, dict):
                     data = [data]
+                gpus = []
                 for gpu in data:
                     name = gpu.get("Name", "").lower()
                     if ("amd" in name or "radeon" in name or "ati" in name) \
@@ -437,41 +459,50 @@ def _detect_amd_gpu() -> Optional[Dict[str, Any]]:
                         driver = gpu.get("DriverVersion")
                         if driver:
                             gpu_info["driver_version"] = driver
-                        return gpu_info
+                        gpus.append(gpu_info)
+                if gpus:
+                    return gpus
         except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
             pass
 
-    return None
+    return []
 
 
-def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
+def _detect_intel_gpu() -> list:
     """
-    Détecte un GPU Intel (Arc, Data Center GPU, Flex, intégré) via
+    Détecte tous les GPUs Intel (Arc, Data Center GPU, Flex, intégré) via
     plusieurs méthodes : PyTorch XPU, xpu-smi, lspci, WMI (Windows).
+    Retourne une liste de dicts.
     """
     system = platform.system()
 
-    # Méthode 1 : PyTorch XPU
+    # Méthode 1 : PyTorch XPU — énumère tous les devices
     try:
         import torch
         if hasattr(torch, "xpu") and torch.xpu.is_available():
-            name = "Intel GPU"
-            try:
-                name = torch.xpu.get_device_name(0)
-            except Exception:
-                pass
-            gpu_info = {
-                "type": "Intel",
-                "name": name,
-                "backend": "sycl",
-                "detected_via": "pytorch_xpu",
-            }
-            try:
-                mem_total = torch.xpu.get_device_properties(0).total_memory
-                gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
-            except Exception:
-                pass
-            return gpu_info
+            gpus = []
+            device_count = torch.xpu.device_count()
+            for i in range(device_count):
+                name = "Intel GPU"
+                try:
+                    name = torch.xpu.get_device_name(i)
+                except Exception:
+                    pass
+                gpu_info = {
+                    "type": "Intel",
+                    "name": name,
+                    "backend": "sycl",
+                    "detected_via": "pytorch_xpu",
+                    "device_index": i,
+                }
+                try:
+                    mem_total = torch.xpu.get_device_properties(i).total_memory
+                    gpu_info["vram_total_mb"] = round(mem_total / (1024**2))
+                except Exception:
+                    pass
+                gpus.append(gpu_info)
+            if gpus:
+                return gpus
     except ImportError:
         pass
 
@@ -500,7 +531,7 @@ def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
                         gpu_info["vram_total_mb"] = round(size_val * 1024)
                     elif "MI" in unit or "MB" in unit:
                         gpu_info["vram_total_mb"] = round(size_val)
-                return gpu_info
+                return [gpu_info]
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
@@ -514,18 +545,21 @@ def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
                 capture_output=True, text=True, timeout=10,
             )
             if result.returncode == 0:
+                gpus = []
                 for line in result.stdout.strip().split("\n"):
                     lower = line.lower()
                     if "vga" in lower or "3d" in lower or "display" in lower:
                         if "intel" in lower and any(kw in lower for kw in intel_gpu_keywords):
                             name_match = re.search(r"Intel.*?(?:\[|$)", line)
                             name = name_match.group(0).rstrip("[").strip() if name_match else "Intel GPU"
-                            return {
+                            gpus.append({
                                 "type": "Intel",
                                 "name": name,
                                 "backend": "sycl",
                                 "detected_via": "lspci",
-                            }
+                            })
+                if gpus:
+                    return gpus
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
@@ -540,6 +574,7 @@ def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
                 data = json.loads(result.stdout)
                 if isinstance(data, dict):
                     data = [data]
+                gpus = []
                 for gpu in data:
                     name = gpu.get("Name", "").lower()
                     if "intel" in name and any(kw in name for kw in intel_gpu_keywords):
@@ -552,11 +587,13 @@ def _detect_intel_gpu() -> Optional[Dict[str, Any]]:
                         adapter_ram = gpu.get("AdapterRAM")
                         if adapter_ram and adapter_ram > 0:
                             gpu_info["vram_total_mb"] = round(adapter_ram / (1024**2))
-                        return gpu_info
+                        gpus.append(gpu_info)
+                if gpus:
+                    return gpus
         except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
             pass
 
-    return None
+    return []
 
 
 def _detect_python_backends() -> Dict[str, bool]:

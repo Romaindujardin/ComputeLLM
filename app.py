@@ -17,7 +17,7 @@ from datetime import datetime
 # Ajouter le répertoire parent au path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.hardware_detect import get_full_hardware_info, get_hardware_summary
+from src.hardware_detect import get_full_hardware_info, get_hardware_summary, detect_all_gpus
 from src.benchmark_classic import run_all_classic_benchmarks
 from src.benchmark_ai import (
     run_all_ai_benchmarks,
@@ -145,6 +145,8 @@ if "server_port" not in st.session_state:
     st.session_state.server_port = 8080
 if "server_auto_mode" not in st.session_state:
     st.session_state.server_auto_mode = True
+if "selected_gpu_index" not in st.session_state:
+    st.session_state.selected_gpu_index = 0
 
 
 # =============================================================================
@@ -237,23 +239,28 @@ def page_hardware():
 
     if gpu["gpus"]:
         for g in gpu["gpus"]:
-            cols = st.columns(4)
-            cols[0].metric("GPU", g["name"])
-            cols[1].metric("Type", g["type"])
-            cols[2].metric("Backend", g["backend"].upper())
+            gpu_idx = g.get('gpu_index', '?')
+            cols = st.columns(5)
+            cols[0].metric("GPU #", gpu_idx)
+            cols[1].metric("Nom", g["name"])
+            cols[2].metric("Type", g["type"])
+            cols[3].metric("Backend", g["backend"].upper())
 
             if "vram_total_mb" in g:
-                cols[3].metric("VRAM", f"{g['vram_total_mb']:.0f} Mo")
+                cols[4].metric("VRAM", f"{g['vram_total_mb']:.0f} Mo")
             elif "unified_memory_gb" in g:
-                cols[3].metric("Mémoire", f"{g['unified_memory_gb']} Go (unifiée)")
+                cols[4].metric("Mémoire", f"{g['unified_memory_gb']} Go (unifiée)")
             elif "vram" in g:
-                cols[3].metric("VRAM", g["vram"])
+                cols[4].metric("VRAM", g["vram"])
+            else:
+                cols[4].metric("VRAM", "N/A")
     else:
         st.warning("Aucun GPU détecté. L'inférence utilisera le CPU.")
 
     cols_backend = st.columns(3)
     cols_backend[0].metric("Backend principal", gpu["primary_backend"].upper())
     cols_backend[1].metric("Backends disponibles", ", ".join(b.upper() for b in gpu["backends"]))
+    cols_backend[2].metric("GPUs détectés", len(gpu["gpus"]))
 
     # Bibliothèques Python
     py_backends = gpu.get("python_backends", {})
@@ -354,6 +361,47 @@ def page_benchmark():
         return
 
     hw = st.session_state.hardware_info
+
+    # ─── Sélection du GPU ───
+    st.markdown("### 🎮 Sélection du GPU")
+    gpu_info = hw["gpu"]
+    gpus = gpu_info.get("gpus", [])
+
+    # Construire les options du sélecteur
+    gpu_options = []
+    for g in gpus:
+        idx = g.get('gpu_index', 0)
+        vram_str = ""
+        if "vram_total_mb" in g:
+            vram_str = f" — {g['vram_total_mb']:.0f} Mo VRAM"
+        elif "unified_memory_gb" in g:
+            vram_str = f" — {g['unified_memory_gb']} Go (unifiée)"
+        gpu_options.append(f"GPU #{idx} : {g['name']} ({g['backend'].upper()}){vram_str}")
+    gpu_options.append("🖥️ CPU uniquement (pas d'accélération GPU)")
+
+    # Valeur par défaut : le premier GPU, ou CPU si aucun
+    default_idx = min(st.session_state.selected_gpu_index, len(gpu_options) - 1)
+
+    selected_gpu_option = st.selectbox(
+        "Choisir le GPU pour le benchmark",
+        options=gpu_options,
+        index=default_idx,
+        key="gpu_selector",
+        help="Sélectionnez le GPU à utiliser pour l'inférence IA. Tous les GPUs détectés sont listés.",
+    )
+
+    # Déterminer le GPU sélectionné
+    selected_gpu_idx = gpu_options.index(selected_gpu_option)
+    st.session_state.selected_gpu_index = selected_gpu_idx
+
+    if selected_gpu_idx < len(gpus):
+        selected_gpu = gpus[selected_gpu_idx]
+        st.success(f"GPU sélectionné : **{selected_gpu['name']}** (Backend: {selected_gpu['backend'].upper()})")
+    else:
+        selected_gpu = None  # CPU mode
+        st.info("Mode CPU sélectionné — pas d'accélération GPU.")
+
+    st.markdown("---")
 
     # Configuration des benchmarks
     st.markdown("### Configuration")
@@ -633,20 +681,21 @@ def page_benchmark():
     st.markdown("---")
 
     # Résumé de la configuration
-    backend_info = detect_best_backend()
+    backend_info = detect_best_backend(selected_gpu=selected_gpu)
     st.markdown("### Résumé")
 
     n_quant_tests = sum(len(qs) for qs in quant_selections.values())
     n_axis_tests = len(temp_selections) + len(lang_selections) + len(pt_selections)
     n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests + n_axis_tests
 
+    gpu_label = selected_gpu["name"] if selected_gpu else "CPU"
     inference_mode_label = "llama-server" if server_mode else "llama-cpp-python"
     cols = st.columns(7)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
-    cols[1].metric("Mode inférence", inference_mode_label)
-    cols[2].metric("Modèles sélectionnés", len(selected_models))
-    cols[3].metric("Tests quantification", n_quant_tests)
-    cols[4].metric("Axes d'analyse", n_axis_tests)
+    cols[1].metric("GPU choisi", gpu_label)
+    cols[2].metric("Mode inférence", inference_mode_label)
+    cols[3].metric("Modèles sélectionnés", len(selected_models))
+    cols[4].metric("Tests quantification", n_quant_tests)
     cols[5].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
     cols[6].metric("Tests total", n_tests)
 
