@@ -735,7 +735,8 @@ def page_benchmark():
                 st.write("Exécution des tests CPU, GPU et mémoire...")
                 try:
                     classic_results = run_all_classic_benchmarks(
-                        progress_callback=classic_callback
+                        progress_callback=classic_callback,
+                        selected_gpu=selected_gpu,
                     )
                     st.session_state.classic_results = classic_results
                     classic_status.update(
@@ -833,6 +834,7 @@ def page_benchmark():
                             language_models=lang_selections if lang_selections else None,
                             prompt_type_models=pt_selections if pt_selections else None,
                             progress_callback=ai_callback,
+                            selected_gpu=selected_gpu,
                         )
 
                     st.session_state.ai_results = ai_results
@@ -876,8 +878,16 @@ def page_benchmark():
         st.markdown("### Sauvegarde")
 
         try:
+            # Enrichir les infos matérielles avec le GPU sélectionné
+            hw_with_selection = dict(hw)
+            if selected_gpu:
+                hw_with_selection["selected_gpu"] = {
+                    "gpu_index": selected_gpu.get("gpu_index", 0),
+                    "name": selected_gpu.get("name", "?"),
+                    "backend": selected_gpu.get("backend", "?"),
+                }
             save_path = save_results(
-                hardware_info=hw,
+                hardware_info=hw_with_selection,
                 classic_results=st.session_state.classic_results,
                 ai_results=st.session_state.ai_results,
             )
@@ -925,7 +935,12 @@ def page_benchmark():
                 gpu_res = gpu.get("results", {})
                 if gpu_res:
                     largest = list(gpu_res.values())[-1]
-                    cols[3].metric("GPU", f"{largest.get('gflops', 0)} GFLOPS")
+                    gpu_device = gpu.get("device", "GPU")
+                    gpu_idx = gpu.get("gpu_index")
+                    gpu_metric_label = f"GPU ({gpu_device})" if gpu_device else "GPU"
+                    if gpu_idx is not None:
+                        gpu_metric_label = f"GPU #{gpu_idx}"
+                    cols[3].metric(gpu_metric_label, f"{largest.get('gflops', 0)} GFLOPS")
             elif gpu.get("status") == "skipped":
                 cols[3].metric("GPU", "Ignoré ⚠️", gpu.get("reason", "")[:60])
             else:
@@ -1025,7 +1040,12 @@ def page_results():
         timestamp = meta.get("timestamp", "")[:16].replace("T", " ")
         ram = meta.get("ram_gb", 0)
         backend = meta.get("backend", "cpu").upper()
-        label = f"**{fname}** — {cpu} | {ram} Go RAM | {backend} | {timestamp}"
+        gpu_name = meta.get("gpu", "None")
+        gpu_count = meta.get("gpu_count", 0)
+        gpu_label = gpu_name
+        if gpu_count > 1:
+            gpu_label += f" (+{gpu_count - 1})"
+        label = f"**{fname}** — {cpu} | {gpu_label} | {ram} Go RAM | {backend} | {timestamp}"
 
         col_cb, col_del = st.columns([20, 1])
         with col_cb:
@@ -1111,15 +1131,50 @@ def _display_single_result(data: dict, filename: str):
     hw = data.get("hardware", {})
     cpu_model = hw.get("cpu", {}).get("model", "Unknown")
     gpus = hw.get("gpu", {}).get("gpus", [])
-    gpu_name = gpus[0]["name"] if gpus else "None"
     ram_total = hw.get("ram", {}).get("total_gb", 0)
     backend = hw.get("gpu", {}).get("primary_backend", "cpu")
 
-    cols = st.columns(4)
-    cols[0].metric("CPU", cpu_model)
-    cols[1].metric("GPU", gpu_name)
-    cols[2].metric("RAM", f"{ram_total} Go")
-    cols[3].metric("Backend", backend.upper())
+    # GPU sélectionné pour le benchmark (si enregistré)
+    selected_gpu_info = hw.get("selected_gpu", {})
+    selected_gpu_idx = selected_gpu_info.get("gpu_index", 0)
+    selected_gpu_name = selected_gpu_info.get("name", "")
+
+    # Afficher tous les GPUs détectés
+    if gpus:
+        n_gpus = len(gpus)
+        if n_gpus == 1:
+            gpu_label = gpus[0].get("name", "?")
+        else:
+            gpu_label = f"{n_gpus} GPUs détectés"
+
+        cols = st.columns(4)
+        cols[0].metric("CPU", cpu_model)
+        cols[1].metric("GPU", gpu_label)
+        cols[2].metric("RAM", f"{ram_total} Go")
+        cols[3].metric("Backend", backend.upper())
+
+        # Détail de chaque GPU avec indication du GPU utilisé
+        if n_gpus > 1 or selected_gpu_name:
+            for g in gpus:
+                g_idx = g.get("gpu_index", 0)
+                is_selected = (g_idx == selected_gpu_idx) if selected_gpu_info else (g_idx == 0)
+                prefix = "✅ " if is_selected else ""
+                suffix = " *(utilisé pour le benchmark)*" if is_selected else ""
+                vram_str = ""
+                if "vram_total_mb" in g:
+                    vram_str = f" — {g['vram_total_mb']:.0f} Mo VRAM"
+                elif "unified_memory_gb" in g:
+                    vram_str = f" — {g['unified_memory_gb']} Go (unifiée)"
+                st.markdown(
+                    f"- {prefix}**GPU #{g_idx}** : {g.get('name', '?')} "
+                    f"({g.get('backend', '?').upper()}){vram_str}{suffix}"
+                )
+    else:
+        cols = st.columns(4)
+        cols[0].metric("CPU", cpu_model)
+        cols[1].metric("GPU", "Aucun")
+        cols[2].metric("RAM", f"{ram_total} Go")
+        cols[3].metric("Backend", backend.upper())
 
     st.markdown("---")
 
@@ -1183,10 +1238,14 @@ def _display_single_result(data: dict, filename: str):
                 gpu_chart["Taille"].append(size)
                 gpu_chart["GFLOPS"].append(vals.get("gflops", 0))
 
+            gpu_idx_label = ""
+            if gpu_bench.get("gpu_index") is not None and len(gpus) > 1:
+                gpu_idx_label = f" [GPU #{gpu_bench['gpu_index']}]"
+
             fig = px.bar(
                 gpu_chart,
                 x="Taille", y="GFLOPS",
-                title=f"Performance GPU ({gpu_bench.get('backend', '')}) - {gpu_bench.get('device', '')}",
+                title=f"Performance GPU ({gpu_bench.get('backend', '')}) - {gpu_bench.get('device', '')}{gpu_idx_label}",
                 color_discrete_sequence=["#FF6B6B"],
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -1694,13 +1753,25 @@ def _display_comparison(loaded_data: dict):
 
     # ─── Tableau comparatif matériel ───
     st.markdown("#### Comparaison matérielle")
-    hw_table = {"Résultat": [], "CPU": [], "GPU": [], "RAM (Go)": [], "Backend": []}
+    hw_table = {"Résultat": [], "CPU": [], "GPU(s)": [], "GPU benchmark": [], "RAM (Go)": [], "Backend": []}
     for fname, data in loaded_data.items():
         hw = data.get("hardware", {})
         hw_table["Résultat"].append(result_labels[fname])
         hw_table["CPU"].append(hw.get("cpu", {}).get("model", "?"))
         gpus = hw.get("gpu", {}).get("gpus", [])
-        hw_table["GPU"].append(gpus[0]["name"] if gpus else "None")
+        if gpus:
+            gpu_names = ", ".join(g.get("name", "?") for g in gpus)
+        else:
+            gpu_names = "Aucun"
+        hw_table["GPU(s)"].append(gpu_names)
+        # GPU utilisé pour le benchmark
+        sel_gpu = hw.get("selected_gpu", {})
+        if sel_gpu:
+            hw_table["GPU benchmark"].append(f"#{sel_gpu.get('gpu_index', 0)} {sel_gpu.get('name', '?')}")
+        elif gpus:
+            hw_table["GPU benchmark"].append(gpus[0].get("name", "?"))
+        else:
+            hw_table["GPU benchmark"].append("CPU")
         hw_table["RAM (Go)"].append(hw.get("ram", {}).get("total_gb", 0))
         hw_table["Backend"].append(
             hw.get("gpu", {}).get("primary_backend", "cpu").upper()
@@ -1785,8 +1856,16 @@ def _display_comparison(loaded_data: dict):
                 has_gpu = True
                 sizes = list(gpu_results.keys())
                 gflops_vals = [gpu_results[s].get("gflops", 0) for s in sizes]
+                # Inclure le nom du GPU utilisé dans le label
+                gpu_device = gpu_bench.get("device", "")
+                gpu_idx_str = ""
+                if gpu_bench.get("gpu_index") is not None:
+                    gpu_idx_str = f" [GPU #{gpu_bench['gpu_index']}]"
+                trace_name = f"{result_labels[fname]}"
+                if gpu_device:
+                    trace_name += f" ({gpu_device}{gpu_idx_str})"
                 fig_gpu.add_trace(go.Bar(
-                    name=result_labels[fname],
+                    name=trace_name,
                     x=sizes,
                     y=gflops_vals,
                     marker_color=result_colors[fname],

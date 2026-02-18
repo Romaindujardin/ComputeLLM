@@ -230,8 +230,11 @@ def detect_all_gpus() -> list:
     return gpu_info.get("gpus", [])
 
 
-def _detect_nvidia_gpu() -> Optional[Dict[str, Any]]:
-    """Détecte un GPU NVIDIA via nvidia-smi."""
+def _detect_nvidia_gpu() -> list:
+    """
+    Détecte tous les GPUs NVIDIA via nvidia-smi.
+    Retourne une liste de dicts (un par GPU).
+    """
     try:
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=name,memory.total,memory.free,driver_version,compute_cap",
@@ -244,7 +247,7 @@ def _detect_nvidia_gpu() -> Optional[Dict[str, Any]]:
             for line in lines:
                 parts = [p.strip() for p in line.split(',')]
                 if len(parts) >= 5:
-                    return {
+                    gpus.append({
                         "type": "NVIDIA",
                         "name": parts[0],
                         "vram_total_mb": float(parts[1]),
@@ -252,12 +255,15 @@ def _detect_nvidia_gpu() -> Optional[Dict[str, Any]]:
                         "driver_version": parts[3],
                         "compute_capability": parts[4],
                         "backend": "cuda",
-                    }
+                        "device_index": len(gpus),
+                    })
+            if gpus:
+                return gpus
     except FileNotFoundError:
         pass
     except Exception:
         pass
-    return None
+    return []
 
 
 def _detect_metal_gpu() -> Optional[Dict[str, Any]]:

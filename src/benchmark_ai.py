@@ -913,6 +913,7 @@ def run_all_ai_benchmarks(
     language_models: Dict[str, List[str]] = None,
     prompt_type_models: Dict[str, List[str]] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute les benchmarks IA pour tous les modèles sélectionnés,
@@ -930,6 +931,8 @@ def run_all_ai_benchmarks(
         prompt_type_models: Dict {model_key: [pt_key, ...]} pour
             le comparatif de type de prompt. Si None, pas de comparatif.
         progress_callback: Callback(progress, message).
+        selected_gpu: (Optionnel) Dict GPU provenant de detect_all_gpus().
+                     Si fourni, utilise ce GPU au lieu de l'auto-détection.
 
     Returns:
         Dict contenant tous les résultats de benchmark IA.
@@ -981,6 +984,7 @@ def run_all_ai_benchmarks(
         all_results[model_key] = benchmark_model(
             model_key,
             progress_callback=model_progress,
+            selected_gpu=selected_gpu,
         )
 
     # ── Benchmarks de comparaison de quantification ──
@@ -1009,6 +1013,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 quant_keys,
                 progress_callback=quant_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += n_q
 
@@ -1035,6 +1040,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 temp_keys,
                 progress_callback=temp_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -1061,6 +1067,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 lang_keys,
                 progress_callback=lang_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -1087,6 +1094,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 pt_keys,
                 progress_callback=pt_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -1203,6 +1211,7 @@ def run_temperature_comparison(
     model_key: str,
     temperature_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle à différentes températures.
@@ -1256,7 +1265,7 @@ def run_temperature_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -1338,6 +1347,7 @@ def run_language_comparison(
     model_key: str,
     language_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle selon la langue du prompt.
@@ -1391,7 +1401,7 @@ def run_language_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -1473,6 +1483,7 @@ def run_prompt_type_comparison(
     model_key: str,
     prompt_type_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle selon le type de prompt.
@@ -1526,7 +1537,7 @@ def run_prompt_type_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:

@@ -591,10 +591,16 @@ def benchmark_memory_bandwidth(
 
 def benchmark_gpu(
     progress_callback: Optional[Callable] = None,
+    selected_gpu: dict = None,
 ) -> Dict[str, Any]:
     """
     Benchmark GPU via PyTorch (CUDA ou MPS).
     Effectue des multiplications matricielles sur le GPU.
+
+    Args:
+        progress_callback: Callback(progress, message).
+        selected_gpu: (Optionnel) Dict GPU avec 'backend' et 'device_index'.
+                     Si fourni, utilise ce GPU spécifique.
     """
     try:
         import torch
@@ -610,9 +616,15 @@ def benchmark_gpu(
     device_name = ""
     backend = ""
 
+    # Indice du device sélectionné par l'utilisateur
+    dev_idx = selected_gpu.get("device_index", 0) if selected_gpu else 0
+
     if torch.cuda.is_available():
-        device = torch.device("cuda")
-        device_name = torch.cuda.get_device_name(0)
+        # Vérifier que l'indice est valide
+        if dev_idx >= torch.cuda.device_count():
+            dev_idx = 0
+        device = torch.device(f"cuda:{dev_idx}")
+        device_name = torch.cuda.get_device_name(dev_idx)
         # Distinguer AMD ROCm (HIP) de NVIDIA CUDA
         if hasattr(torch.version, "hip") and torch.version.hip:
             backend = f"ROCm/HIP {torch.version.hip}"
@@ -623,9 +635,10 @@ def benchmark_gpu(
         # peut crasher sur certains GPU intégrés (Iris, UHD)
         try:
             if hasattr(torch, "xpu") and torch.xpu.is_available():
-                device = torch.device("xpu")
+                xpu_idx = dev_idx if dev_idx < torch.xpu.device_count() else 0
+                device = torch.device(f"xpu:{xpu_idx}")
                 try:
-                    device_name = torch.xpu.get_device_name(0)
+                    device_name = torch.xpu.get_device_name(xpu_idx)
                 except Exception:
                     device_name = "Intel GPU (XPU)"
                 backend = "SYCL/XPU"
@@ -637,9 +650,10 @@ def benchmark_gpu(
             try:
                 import intel_extension_for_pytorch as ipex  # noqa: F401
                 if hasattr(torch, "xpu") and torch.xpu.is_available():
-                    device = torch.device("xpu")
+                    xpu_idx = dev_idx if dev_idx < torch.xpu.device_count() else 0
+                    device = torch.device(f"xpu:{xpu_idx}")
                     try:
-                        device_name = torch.xpu.get_device_name(0)
+                        device_name = torch.xpu.get_device_name(xpu_idx)
                     except Exception:
                         device_name = "Intel GPU (XPU via IPEX)"
                     backend = "SYCL/XPU (IPEX)"
@@ -661,9 +675,9 @@ def benchmark_gpu(
         # Vérifier si un GPU AMD est physiquement présent
         try:
             from src.hardware_detect import _detect_amd_gpu
-            amd_gpu = _detect_amd_gpu()
-            if amd_gpu:
-                gpu_name = amd_gpu.get("name", "AMD GPU")
+            amd_gpus = _detect_amd_gpu()
+            if amd_gpus:
+                gpu_name = amd_gpus[0].get("name", "AMD GPU")
                 torch_version = getattr(torch, "__version__", "")
                 if "+cu" in torch_version or "cuda" in torch_version.lower():
                     reason = (
@@ -694,9 +708,9 @@ def benchmark_gpu(
         if not advice:
             try:
                 from src.hardware_detect import _detect_intel_gpu
-                intel_gpu = _detect_intel_gpu()
-                if intel_gpu:
-                    gpu_name = intel_gpu.get("name", "Intel GPU")
+                intel_gpus = _detect_intel_gpu()
+                if intel_gpus:
+                    gpu_name = intel_gpus[0].get("name", "Intel GPU")
                     # Vérifier si PyTorch est un build CUDA (inutile sur Intel)
                     torch_version = getattr(torch, "__version__", "")
                     if "+cu" in torch_version or "cuda" in torch_version.lower():
@@ -801,6 +815,7 @@ def benchmark_gpu(
             "status": "completed",
             "device": device_name,
             "backend": backend,
+            "gpu_index": dev_idx,
             "results": results,
         }
 
@@ -838,6 +853,7 @@ def benchmark_gpu(
 
 def run_all_classic_benchmarks(
     progress_callback: Optional[Callable] = None,
+    selected_gpu: dict = None,
 ) -> Dict[str, Any]:
     """
     Exécute tous les benchmarks classiques et retourne les résultats consolidés.
@@ -845,6 +861,8 @@ def run_all_classic_benchmarks(
     Args:
         progress_callback: Fonction callback(progress: float, message: str)
                           progress entre 0.0 et 1.0
+        selected_gpu: (Optionnel) Dict GPU avec 'backend' et 'device_index'.
+                     Si fourni, utilise ce GPU spécifique pour le benchmark GPU.
     """
     all_results = {}
 
@@ -919,7 +937,8 @@ def run_all_classic_benchmarks(
             if progress_callback:
                 progress_callback(0.80, "Démarrage benchmark GPU...")
             all_results["gpu_compute"] = benchmark_gpu(
-                progress_callback=sub_progress(0.80, 0.20)
+                progress_callback=sub_progress(0.80, 0.20),
+                selected_gpu=selected_gpu,
             )
         except Exception as e:
             all_results["gpu_compute"] = {
