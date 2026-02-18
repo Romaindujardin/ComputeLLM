@@ -4,12 +4,13 @@
 
 ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de différentes machines lors de l'inférence locale de modèles de langage, en mettant en évidence les différences d'architecture :
 
-| Architecture           | Exemple                     | Backend        |
-| ---------------------- | --------------------------- | -------------- |
-| x86 + GPU dédié NVIDIA | Intel/AMD CPU + NVIDIA RTX  | CUDA           |
-| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | ROCm           |
-| ARM + Mémoire unifiée  | Apple Silicon (M1/M2/M3/M4) | Metal          |
-| CPU seul               | Tout processeur             | CPU (fallback) |
+| Architecture           | Exemple                     | Backend            |
+| ---------------------- | --------------------------- | ------------------ |
+| x86 + GPU dédié NVIDIA | Intel/AMD CPU + NVIDIA RTX  | CUDA               |
+| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | ROCm (Linux)       |
+| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | DirectML (Windows) |
+| ARM + Mémoire unifiée  | Apple Silicon (M1/M2/M3/M4) | Metal              |
+| CPU seul               | Tout processeur             | CPU (fallback)     |
 
 ---
 
@@ -113,6 +114,10 @@ set CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 CMAKE_ARGS="-DGGML_HIPBLAS=on" pip install llama-cpp-python
 ```
 
+#### Windows (AMD GPU)
+
+ROCm / HIP n'est pas disponible sur Windows. Utilisez le **mode llama-server** avec un binaire **Vulkan** pré-compilé (voir section [Mode llama-server](#mode-llama-server-sans-compilation)).
+
 #### CPU uniquement (fallback)
 
 ```bash
@@ -140,6 +145,20 @@ Pour les GPU AMD (Radeon RX, Instinct), installer la version ROCm de PyTorch :
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
 ```
+
+> ⚠️ **ROCm est uniquement disponible sur Linux.** Pour Windows, voir la section DirectML ci-dessous.
+
+#### Windows (AMD GPU — DirectML)
+
+Pour les GPU AMD sur Windows (Radeon RX, Radeon Pro), ROCm n'est pas disponible.
+Utilisez **torch-directml** qui s'appuie sur DirectX 12 :
+
+```bash
+pip install torch-directml
+```
+
+> `torch-directml` fonctionne avec les GPU AMD, Intel et NVIDIA sur Windows.
+> Il est utilisé automatiquement par ComputeLLM si aucun autre backend GPU (CUDA/ROCm/XPU) n'est détecté.
 
 #### Windows / Linux (Intel GPU — XPU)
 
@@ -236,12 +255,12 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ### Benchmarks classiques
 
-| Métrique              | Description                      |
-| --------------------- | -------------------------------- |
-| GFLOPS (ST)           | Performance CPU single-thread    |
-| GFLOPS (MT)           | Performance CPU multi-thread     |
-| Bande passante (Go/s) | Lecture, écriture, copie mémoire |
-| GFLOPS GPU            | Performance GPU (CUDA/Metal)     |
+| Métrique              | Description                                |
+| --------------------- | ------------------------------------------ |
+| GFLOPS (ST)           | Performance CPU single-thread              |
+| GFLOPS (MT)           | Performance CPU multi-thread               |
+| Bande passante (Go/s) | Lecture, écriture, copie mémoire           |
+| GFLOPS GPU            | Performance GPU (CUDA/ROCm/DirectML/Metal) |
 
 ### Benchmarks IA
 
@@ -339,19 +358,19 @@ $$\text{Bande passante (Go/s)} = \frac{\text{taille\_données\_Go}}{\text{temps\
 
 ### Phase 4 — GPU Compute
 
-| Paramètre | Valeur                                         |
-| --------- | ---------------------------------------------- |
-| Outil     | `torch.mm` (PyTorch, float32)                  |
-| Tailles   | 1024×1024, 2048×2048, 4096×4096                |
-| Warmup    | 1 run (non comptabilisé)                       |
-| Runs      | 3 par taille                                   |
-| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · MPS (Apple) |
+| Paramètre | Valeur                                                              |
+| --------- | ------------------------------------------------------------------- |
+| Outil     | `torch.mm` (PyTorch, float32)                                       |
+| Tailles   | 1024×1024, 2048×2048, 4096×4096                                     |
+| Warmup    | 1 run (non comptabilisé)                                            |
+| Runs      | 3 par taille                                                        |
+| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · DirectML (Windows) · MPS (Apple) |
 
 **Déroulement** :
 
-1. Détection automatique du backend GPU (priorité : CUDA → XPU/IPEX → MPS)
+1. Détection automatique du backend GPU (priorité : CUDA → ROCm → XPU/IPEX → DirectML → MPS)
 2. Warmup : 1 multiplication non chronométrée pour initialiser le GPU
-3. Pour chaque taille, 3 runs chronométrés avec synchronisation (`torch.cuda.synchronize()` / `torch.xpu.synchronize()` / `torch.mps.synchronize()`)
+3. Pour chaque taille, 3 runs chronométrés avec synchronisation (`torch.cuda.synchronize()` / `torch.xpu.synchronize()` / `.cpu()` pour DirectML et MPS)
 4. Calcul GFLOPS identique aux phases CPU
 
 **Protection Level Zero** : si le driver Intel crashe (`UR_RESULT_ERROR_UNKNOWN`), le benchmark GPU est ignoré proprement avec un message d'aide.
@@ -663,3 +682,17 @@ Modifiez `src/config.py` pour ajuster :
 - Sur Apple Silicon, la mémoire unifiée est partagée entre CPU et GPU.
 - Les résultats varient selon la charge système et la température du processeur.
 - Pour des résultats reproductibles, fermez les applications gourmandes en ressources.
+
+---
+
+## Compatibilité GPU par plateforme
+
+| Plateforme      | GPU    | Benchmark classique (PyTorch) | Benchmark IA (LLM)                               |
+| --------------- | ------ | ----------------------------- | ------------------------------------------------ |
+| **Linux**       | NVIDIA | PyTorch CUDA                  | llama-cpp-python (CUDA) ou llama-server (CUDA)   |
+| **Linux**       | AMD    | PyTorch ROCm                  | llama-cpp-python (HIPBLAS) ou llama-server (HIP) |
+| **Linux**       | Intel  | PyTorch XPU / IPEX            | llama-cpp-python (SYCL) ou llama-server (SYCL)   |
+| **Windows**     | NVIDIA | PyTorch CUDA                  | llama-cpp-python (CUDA) ou llama-server (CUDA)   |
+| **Windows**     | AMD    | `torch-directml`              | llama-server (Vulkan)                            |
+| **Windows**     | Intel  | PyTorch XPU / IPEX            | llama-server (SYCL/Vulkan)                       |
+| **macOS (ARM)** | Apple  | PyTorch MPS                   | llama-cpp-python (Metal) ou llama-server (Metal) |

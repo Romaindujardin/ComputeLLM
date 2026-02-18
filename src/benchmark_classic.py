@@ -660,6 +660,19 @@ def benchmark_gpu(
             except Exception:
                 pass  # IPEX non installé ou Level Zero crash
 
+    # DirectML (Windows — AMD/Intel/NVIDIA via DirectX 12)
+    if device is None:
+        try:
+            import torch_directml
+            if torch_directml.is_available():
+                dml_count = torch_directml.device_count()
+                dml_idx = dev_idx if dev_idx < dml_count else 0
+                device = torch_directml.device(dml_idx)
+                device_name = torch_directml.device_name(dml_idx)
+                backend = "DirectML"
+        except ImportError:
+            pass
+
     # MPS (Apple Silicon)
     if device is None:
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -669,7 +682,7 @@ def benchmark_gpu(
 
     # Aucun backend GPU trouvé — message d'aide contextuel
     if device is None:
-        reason = "Aucun GPU compatible (CUDA/ROCm/XPU/MPS) détecté"
+        reason = "Aucun GPU compatible (CUDA/ROCm/XPU/DirectML/MPS) détecté"
         advice = ""
 
         # Vérifier si un GPU AMD est physiquement présent
@@ -679,28 +692,44 @@ def benchmark_gpu(
             if amd_gpus:
                 gpu_name = amd_gpus[0].get("name", "AMD GPU")
                 torch_version = getattr(torch, "__version__", "")
+                is_windows = platform.system() == "Windows"
+                is_linux = platform.system() == "Linux"
                 if "+cu" in torch_version or "cuda" in torch_version.lower():
                     reason = (
                         f"GPU AMD ({gpu_name}) détecté, mais votre PyTorch "
                         f"({torch_version}) est compilé pour CUDA (NVIDIA)."
                     )
-                    advice = (
-                        "Pour benchmarker votre GPU AMD, installez PyTorch "
-                        "avec le support ROCm :\n"
-                        "pip install torch torchvision torchaudio "
-                        "--index-url https://download.pytorch.org/whl/rocm6.2"
-                    )
+                    if is_windows:
+                        advice = (
+                            "Sur Windows, installez torch-directml pour "
+                            "benchmarker votre GPU AMD :\n"
+                            "pip install torch-directml"
+                        )
+                    else:
+                        advice = (
+                            "Pour benchmarker votre GPU AMD, installez PyTorch "
+                            "avec le support ROCm :\n"
+                            "pip install torch torchvision torchaudio "
+                            "--index-url https://download.pytorch.org/whl/rocm6.2"
+                        )
                 else:
                     reason = (
                         f"GPU AMD ({gpu_name}) détecté, mais PyTorch n'a pas "
                         f"le support ROCm activé."
                     )
-                    advice = (
-                        "Installez PyTorch avec le support ROCm pour activer "
-                        "le support GPU AMD :\n"
-                        "pip install torch torchvision torchaudio "
-                        "--index-url https://download.pytorch.org/whl/rocm6.2"
-                    )
+                    if is_windows:
+                        advice = (
+                            "ROCm n'est pas disponible sur Windows. "
+                            "Installez torch-directml pour activer le support GPU AMD :\n"
+                            "pip install torch-directml"
+                        )
+                    else:
+                        advice = (
+                            "Installez PyTorch avec le support ROCm pour activer "
+                            "le support GPU AMD :\n"
+                            "pip install torch torchvision torchaudio "
+                            "--index-url https://download.pytorch.org/whl/rocm6.2"
+                        )
         except Exception:
             pass
 
@@ -759,11 +788,14 @@ def benchmark_gpu(
             # Warmup
             A = torch.randn(size, size, device=device, dtype=torch.float32)
             B = torch.randn(size, size, device=device, dtype=torch.float32)
-            _ = torch.mm(A, B)
+            C = torch.mm(A, B)
             if device.type == "cuda":
                 torch.cuda.synchronize()
             elif device.type == "xpu":
                 torch.xpu.synchronize()
+            elif device.type == "privateuseone":
+                # DirectML : forcer la synchronisation en lisant un résultat
+                C.cpu()
 
             for i in range(3):
                 A = torch.randn(size, size, device=device, dtype=torch.float32)
@@ -773,9 +805,11 @@ def benchmark_gpu(
                     torch.cuda.synchronize()
                 elif device.type == "xpu":
                     torch.xpu.synchronize()
+                elif device.type == "privateuseone":
+                    torch.mm(A[:1, :1], B[:1, :1]).cpu()
 
                 start = time.perf_counter()
-                _ = torch.mm(A, B)
+                C = torch.mm(A, B)
 
                 if device.type == "cuda":
                     torch.cuda.synchronize()
@@ -784,6 +818,9 @@ def benchmark_gpu(
                 elif device.type == "mps":
                     # Synchronisation MPS
                     (A + B).cpu()
+                elif device.type == "privateuseone":
+                    # Synchronisation DirectML
+                    C.cpu()
 
                 elapsed = time.perf_counter() - start
                 times.append(elapsed)
@@ -809,6 +846,7 @@ def benchmark_gpu(
                 torch.xpu.empty_cache()
             except AttributeError:
                 pass
+        # DirectML n'a pas de méthode empty_cache explicite
 
         return {
             "test": "GPU Compute",

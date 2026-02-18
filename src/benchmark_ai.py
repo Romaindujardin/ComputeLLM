@@ -309,6 +309,18 @@ def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
             result["n_gpu_layers"] = -1
             result["details"] = f"GPU sélectionné : {gpu_name} (Metal)"
             return result
+        elif backend == "directml":
+            # DirectML (Windows AMD) — llama-cpp-python ne supporte pas DirectML,
+            # on tente Vulkan via llama-server, sinon fallback CPU
+            result["backend"] = "cpu"
+            result["n_gpu_layers"] = 0
+            result["details"] = (
+                f"GPU sélectionné : {gpu_name} (DirectML) — "
+                f"llama-cpp-python ne supporte pas DirectML. "
+                f"Utilisez le mode llama-server avec un binaire Vulkan pour "
+                f"l'accélération GPU, sinon l'inférence se fait sur CPU."
+            )
+            return result
         else:
             # CPU explicitement choisi
             result["details"] = f"CPU sélectionné (pas d'accélération GPU)"
@@ -330,7 +342,7 @@ def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
     except (FileNotFoundError, Exception):
         pass
 
-    # Vérifier AMD GPU / ROCm (HIP)
+    # Vérifier AMD GPU / ROCm (HIP) ou DirectML (Windows)
     # Réutilise _detect_amd_gpu() de hardware_detect pour la cohérence
     try:
         from src.hardware_detect import _detect_amd_gpu
@@ -339,17 +351,31 @@ def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
             amd_gpu = amd_gpus[0]  # Prendre le premier par défaut
             gpu_name = amd_gpu.get("name", "AMD GPU")
             detected_via = amd_gpu.get("detected_via", "unknown")
-            result["backend"] = "rocm"
-            result["n_gpu_layers"] = -1
-            result["details"] = f"AMD GPU détecté ({gpu_name} via {detected_via}), utilisation de ROCm/HIP"
-            result["amd_device"] = gpu_name
-            if "vram_total_mb" in amd_gpu:
-                result["amd_vram_mb"] = amd_gpu["vram_total_mb"]
-            if "hip_version" in amd_gpu:
-                result["hip_version"] = amd_gpu["hip_version"]
-            if "driver_version" in amd_gpu:
-                result["driver_version"] = amd_gpu["driver_version"]
-            return result
+            gpu_backend = amd_gpu.get("backend", "rocm")
+
+            if gpu_backend == "directml":
+                # Windows AMD — DirectML n'est pas supporté par llama-cpp-python
+                result["backend"] = "cpu"
+                result["n_gpu_layers"] = 0
+                result["details"] = (
+                    f"AMD GPU détecté ({gpu_name}) — DirectML n'est pas supporté "
+                    f"par llama-cpp-python. Utilisez le mode llama-server avec un "
+                    f"binaire Vulkan pour l'accélération GPU, sinon fallback CPU."
+                )
+                return result
+            else:
+                # Linux/WSL — ROCm disponible
+                result["backend"] = "rocm"
+                result["n_gpu_layers"] = -1
+                result["details"] = f"AMD GPU détecté ({gpu_name} via {detected_via}), utilisation de ROCm/HIP"
+                result["amd_device"] = gpu_name
+                if "vram_total_mb" in amd_gpu:
+                    result["amd_vram_mb"] = amd_gpu["vram_total_mb"]
+                if "hip_version" in amd_gpu:
+                    result["hip_version"] = amd_gpu["hip_version"]
+                if "driver_version" in amd_gpu:
+                    result["driver_version"] = amd_gpu["driver_version"]
+                return result
     except Exception:
         pass
 

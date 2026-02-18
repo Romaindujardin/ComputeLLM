@@ -181,14 +181,16 @@ def detect_gpu() -> Dict[str, Any]:
             info["backends"].append("cuda")
         info["primary_backend"] = "cuda"
 
-    # --- Détection AMD / ROCm ---
+    # --- Détection AMD / ROCm ou DirectML ---
     amd_gpus = _detect_amd_gpu()
     if amd_gpus:
         info["gpus"].extend(amd_gpus)
-        if "rocm" not in info["backends"]:
-            info["backends"].append("rocm")
+        # Déterminer le backend selon ce que les GPUs reportent
+        amd_backend = amd_gpus[0].get("backend", "rocm")
+        if amd_backend not in info["backends"]:
+            info["backends"].append(amd_backend)
         if info["primary_backend"] == "cpu":
-            info["primary_backend"] = "rocm"
+            info["primary_backend"] = amd_backend
 
     # --- Détection Intel GPU / SYCL ---
     intel_gpus = _detect_intel_gpu()
@@ -456,7 +458,7 @@ def _detect_amd_gpu() -> list:
                         gpu_info = {
                             "type": "AMD",
                             "name": gpu.get("Name", "AMD GPU"),
-                            "backend": "rocm",
+                            "backend": "directml",
                             "detected_via": "wmi",
                         }
                         adapter_ram = gpu.get("AdapterRAM")
@@ -663,6 +665,17 @@ def _detect_python_backends() -> Dict[str, bool]:
         backends["ipex_version"] = getattr(intel_extension_for_pytorch, "__version__", "unknown")
     except ImportError:
         backends["ipex"] = False
+
+    # DirectML (Windows — AMD/Intel/NVIDIA via DirectX 12)
+    try:
+        import torch_directml
+        backends["directml"] = True
+        backends["directml_available"] = torch_directml.is_available()
+        backends["directml_device_count"] = torch_directml.device_count()
+        if torch_directml.device_count() > 0:
+            backends["directml_device_name"] = torch_directml.device_name(0)
+    except ImportError:
+        backends["directml"] = False
 
     return backends
 

@@ -295,6 +295,9 @@ def page_hardware():
             py_cols[3].info("IPEX non détecté (XPU via PyTorch)")
         elif py_backends.get("pytorch_rocm"):
             py_cols[3].success(f"ROCm/HIP {py_backends.get('pytorch_hip_version', '')}")
+        elif py_backends.get("directml") and py_backends.get("directml_available"):
+            device_name = py_backends.get("directml_device_name", "GPU")
+            py_cols[3].success(f"DirectML ({device_name})")
 
     # Modèles compatibles
     st.markdown("---")
