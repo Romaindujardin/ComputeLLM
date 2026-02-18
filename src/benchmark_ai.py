@@ -255,11 +255,15 @@ def download_model(
 # Détection du backend optimal
 # =============================================================================
 
-def detect_best_backend() -> Dict[str, Any]:
+def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
     """
     Détecte le meilleur backend disponible pour l'inférence.
     Retourne des informations sur le backend sélectionné.
-    Supporte : CUDA (NVIDIA), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
+    Supporte : CUDA (NVIDIA), ROCm (AMD), SYCL/XPU (Intel), Metal (Apple), CPU fallback.
+
+    Args:
+        selected_gpu: (Optionnel) Dict GPU provenant de detect_all_gpus().
+                     Si fourni, utilise ce GPU au lieu de l'auto-détection.
     """
     system = platform.system()
     machine = platform.machine()
@@ -270,7 +274,61 @@ def detect_best_backend() -> Dict[str, Any]:
         "details": "",
     }
 
-    # Vérifier CUDA (Windows/Linux)
+    # Si un GPU est explicitement sélectionné par l'utilisateur
+    if selected_gpu is not None:
+        backend = selected_gpu.get("backend", "cpu")
+        gpu_name = selected_gpu.get("name", "GPU")
+
+        if backend == "cuda":
+            result["backend"] = "cuda"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (CUDA)"
+            return result
+        elif backend == "rocm":
+            result["backend"] = "rocm"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (ROCm/HIP)"
+            result["amd_device"] = gpu_name
+            if "vram_total_mb" in selected_gpu:
+                result["amd_vram_mb"] = selected_gpu["vram_total_mb"]
+            if "hip_version" in selected_gpu:
+                result["hip_version"] = selected_gpu["hip_version"]
+            if "driver_version" in selected_gpu:
+                result["driver_version"] = selected_gpu["driver_version"]
+            return result
+        elif backend == "sycl":
+            result["backend"] = "sycl"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (SYCL)"
+            result["intel_device"] = gpu_name
+            if "vram_total_mb" in selected_gpu:
+                result["intel_vram_mb"] = selected_gpu["vram_total_mb"]
+            return result
+        elif backend == "metal":
+            result["backend"] = "metal"
+            result["n_gpu_layers"] = -1
+            result["details"] = f"GPU sélectionné : {gpu_name} (Metal)"
+            return result
+        elif backend == "directml":
+            # DirectML (Windows AMD) — llama-cpp-python ne supporte pas DirectML,
+            # on tente Vulkan via llama-server, sinon fallback CPU
+            result["backend"] = "cpu"
+            result["n_gpu_layers"] = 0
+            result["details"] = (
+                f"GPU sélectionné : {gpu_name} (DirectML) — "
+                f"llama-cpp-python ne supporte pas DirectML. "
+                f"Utilisez le mode llama-server avec un binaire Vulkan pour "
+                f"l'accélération GPU, sinon l'inférence se fait sur CPU."
+            )
+            return result
+        else:
+            # CPU explicitement choisi
+            result["details"] = f"CPU sélectionné (pas d'accélération GPU)"
+            return result
+
+    # === Auto-détection (comportement original) ===
+
+    # Vérifier CUDA / ROCm (NVIDIA ou AMD)
     try:
         import subprocess
         nvidia_check = subprocess.run(
@@ -284,12 +342,50 @@ def detect_best_backend() -> Dict[str, Any]:
     except (FileNotFoundError, Exception):
         pass
 
+    # Vérifier AMD GPU / ROCm (HIP) ou DirectML (Windows)
+    # Réutilise _detect_amd_gpu() de hardware_detect pour la cohérence
+    try:
+        from src.hardware_detect import _detect_amd_gpu
+        amd_gpus = _detect_amd_gpu()
+        if amd_gpus:
+            amd_gpu = amd_gpus[0]  # Prendre le premier par défaut
+            gpu_name = amd_gpu.get("name", "AMD GPU")
+            detected_via = amd_gpu.get("detected_via", "unknown")
+            gpu_backend = amd_gpu.get("backend", "rocm")
+
+            if gpu_backend == "directml":
+                # Windows AMD — DirectML n'est pas supporté par llama-cpp-python
+                result["backend"] = "cpu"
+                result["n_gpu_layers"] = 0
+                result["details"] = (
+                    f"AMD GPU détecté ({gpu_name}) — DirectML n'est pas supporté "
+                    f"par llama-cpp-python. Utilisez le mode llama-server avec un "
+                    f"binaire Vulkan pour l'accélération GPU, sinon fallback CPU."
+                )
+                return result
+            else:
+                # Linux/WSL — ROCm disponible
+                result["backend"] = "rocm"
+                result["n_gpu_layers"] = -1
+                result["details"] = f"AMD GPU détecté ({gpu_name} via {detected_via}), utilisation de ROCm/HIP"
+                result["amd_device"] = gpu_name
+                if "vram_total_mb" in amd_gpu:
+                    result["amd_vram_mb"] = amd_gpu["vram_total_mb"]
+                if "hip_version" in amd_gpu:
+                    result["hip_version"] = amd_gpu["hip_version"]
+                if "driver_version" in amd_gpu:
+                    result["driver_version"] = amd_gpu["driver_version"]
+                return result
+    except Exception:
+        pass
+
     # Vérifier Intel GPU / SYCL (Windows/Linux)
     # Réutilise _detect_intel_gpu() de hardware_detect pour la cohérence
     try:
         from src.hardware_detect import _detect_intel_gpu
-        intel_gpu = _detect_intel_gpu()
-        if intel_gpu:
+        intel_gpus = _detect_intel_gpu()
+        if intel_gpus:
+            intel_gpu = intel_gpus[0]  # Prendre le premier par défaut
             gpu_name = intel_gpu.get("name", "Intel GPU")
             detected_via = intel_gpu.get("detected_via", "unknown")
             result["backend"] = "sycl"
@@ -338,6 +434,7 @@ def _load_model(model_path: str, backend_info: Dict[str, Any], n_ctx: int = 2048
             "Installation :\n"
             "  macOS (Metal) : CMAKE_ARGS=\"-DGGML_METAL=on\" pip install llama-cpp-python\n"
             "  Windows (CUDA): CMAKE_ARGS=\"-DGGML_CUDA=on\" pip install llama-cpp-python\n"
+            "  AMD (ROCm)    : CMAKE_ARGS=\"-DGGML_HIPBLAS=on\" pip install llama-cpp-python\n"
             "  Intel (SYCL)  : CMAKE_ARGS=\"-DGGML_SYCL=on\" pip install llama-cpp-python\n"
             "  CPU only      : pip install llama-cpp-python\n"
             "\n"
@@ -471,6 +568,7 @@ def run_single_inference(
 def benchmark_model(
     model_key: str,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute le benchmark complet pour un modèle donné.
@@ -512,7 +610,7 @@ def benchmark_model(
         model_path = download_model(model_key, progress_callback=None)
 
         # Étape 2: Détection du backend
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -602,6 +700,7 @@ def benchmark_single_quantization(
     model_key: str,
     quant_key: str,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute le benchmark pour une variante de quantification spécifique.
@@ -659,7 +758,7 @@ def benchmark_single_quantization(
         result["actual_file_size_gb"] = round(actual_size_gb, 3)
 
         # Backend
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -756,6 +855,7 @@ def run_quantization_comparison(
     model_key: str,
     quant_keys: List[str],
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute un benchmark comparatif de toutes les quantifications sélectionnées
@@ -804,6 +904,7 @@ def run_quantization_comparison(
             model_key,
             quant_key,
             progress_callback=quant_progress,
+            selected_gpu=selected_gpu,
         )
 
     elapsed = time.time() - start_time
@@ -838,6 +939,7 @@ def run_all_ai_benchmarks(
     language_models: Dict[str, List[str]] = None,
     prompt_type_models: Dict[str, List[str]] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute les benchmarks IA pour tous les modèles sélectionnés,
@@ -855,6 +957,8 @@ def run_all_ai_benchmarks(
         prompt_type_models: Dict {model_key: [pt_key, ...]} pour
             le comparatif de type de prompt. Si None, pas de comparatif.
         progress_callback: Callback(progress, message).
+        selected_gpu: (Optionnel) Dict GPU provenant de detect_all_gpus().
+                     Si fourni, utilise ce GPU au lieu de l'auto-détection.
 
     Returns:
         Dict contenant tous les résultats de benchmark IA.
@@ -906,6 +1010,7 @@ def run_all_ai_benchmarks(
         all_results[model_key] = benchmark_model(
             model_key,
             progress_callback=model_progress,
+            selected_gpu=selected_gpu,
         )
 
     # ── Benchmarks de comparaison de quantification ──
@@ -934,6 +1039,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 quant_keys,
                 progress_callback=quant_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += n_q
 
@@ -960,6 +1066,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 temp_keys,
                 progress_callback=temp_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -986,6 +1093,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 lang_keys,
                 progress_callback=lang_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -1012,6 +1120,7 @@ def run_all_ai_benchmarks(
                 model_key,
                 pt_keys,
                 progress_callback=pt_progress,
+                selected_gpu=selected_gpu,
             )
             task_offset += 1
 
@@ -1128,6 +1237,7 @@ def run_temperature_comparison(
     model_key: str,
     temperature_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle à différentes températures.
@@ -1181,7 +1291,7 @@ def run_temperature_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -1263,6 +1373,7 @@ def run_language_comparison(
     model_key: str,
     language_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle selon la langue du prompt.
@@ -1316,7 +1427,7 @@ def run_language_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:
@@ -1398,6 +1509,7 @@ def run_prompt_type_comparison(
     model_key: str,
     prompt_type_keys: List[str] = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Compare les performances d'un modèle selon le type de prompt.
@@ -1451,7 +1563,7 @@ def run_prompt_type_comparison(
             progress_callback(0.05, f"Vérification {model_config['name']}...")
         model_path = download_model(model_key)
 
-        backend_info = detect_best_backend()
+        backend_info = detect_best_backend(selected_gpu=selected_gpu)
         result["backend"] = backend_info
 
         if progress_callback:

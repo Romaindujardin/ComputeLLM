@@ -414,7 +414,7 @@ INFERENCE_CONFIG = {
     "repeat_penalty": 1.1,      # Pénalité de répétition
     "n_ctx": 2048,              # Taille du contexte
     "seed": 42,                 # Graine pour reproductibilité
-    "n_warmup_runs": 1,         # Nombre de runs d'échauffement
+    "n_warmup_runs": 2,         # Nombre de runs d'échauffement
     "n_benchmark_runs": 3,      # Nombre de runs de benchmark
 }
 
@@ -437,7 +437,7 @@ MONITOR_INTERVAL = 0.5  # Intervalle d'échantillonnage en secondes
 LLAMA_SERVER_CONFIG = {
     "host": "127.0.0.1",
     "port": 8080,
-    "startup_timeout_s": 300,       # Temps max pour démarrer le serveur (SYCL: 1ère compilation longue)
+    "startup_timeout_s": 300,       # Temps max pour démarrer le serveur (SYCL/ROCm: 1ère compilation longue)
     "health_check_interval_s": 1.0, # Intervalle entre les checks de santé
     "shutdown_timeout_s": 10,       # Temps max pour arrêter le serveur
 }
@@ -446,5 +446,5 @@ LLAMA_SERVER_CONFIG = {
 LLAMA_SERVER_BINARY_NAMES = {
     "Darwin": ["llama-server", "llama-server-metal", "server"],
     "Windows": ["llama-server.exe", "server.exe"],
-    "Linux": ["llama-server", "llama-server-cuda", "llama-server-vulkan", "server"],
+    "Linux": ["llama-server", "llama-server-cuda", "llama-server-rocm", "llama-server-vulkan", "server"],
 }

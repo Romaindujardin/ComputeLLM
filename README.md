@@ -4,18 +4,20 @@
 
 ComputeLLM permet de comparer les performances matérielles (CPU, GPU, RAM) de différentes machines lors de l'inférence locale de modèles de langage, en mettant en évidence les différences d'architecture :
 
-| Architecture          | Exemple                     | Backend        |
-| --------------------- | --------------------------- | -------------- |
-| x86 + GPU dédié       | Intel/AMD + NVIDIA RTX      | CUDA           |
-| ARM + Mémoire unifiée | Apple Silicon (M1/M2/M3/M4) | Metal          |
-| CPU seul              | Tout processeur             | CPU (fallback) |
+| Architecture           | Exemple                     | Backend            |
+| ---------------------- | --------------------------- | ------------------ |
+| x86 + GPU dédié NVIDIA | Intel/AMD CPU + NVIDIA RTX  | CUDA               |
+| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | ROCm (Linux)       |
+| x86 + GPU dédié AMD    | Intel/AMD CPU + Radeon RX   | DirectML (Windows) |
+| ARM + Mémoire unifiée  | Apple Silicon (M1/M2/M3/M4) | Metal              |
+| CPU seul               | Tout processeur             | CPU (fallback)     |
 
 ---
 
 ## Fonctionnalités
 
 - **Détection matérielle automatique** : OS, CPU (modèle, cœurs, fréquence), GPU (VRAM, backend), RAM (totale, disponible, unifiée)
-- **Benchmarks classiques** : CPU single-thread, CPU multi-thread, bande passante mémoire, GPU compute
+- **Benchmarks classiques** : CPU single-thread, CPU multi-thread, bande passante mémoire, GPU Raw Compute, GPU System Score
 - **Benchmarks IA** : Inférence locale de LLM via `llama-cpp-python` (GGUF) ou `llama-server` (HTTP)
 - **Mode llama-server** : Utilise des binaires pré-compilés — aucune compilation requise côté Python
 - **Modèles supportés** : TinyLlama 1.1B, Mistral 7B, Llama 2 13B, CodeLlama 34B, Llama 2 70B
@@ -106,6 +108,16 @@ CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python
 set CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
 ```
 
+#### Linux (AMD GPU — ROCm / HIP)
+
+```bash
+CMAKE_ARGS="-DGGML_HIPBLAS=on" pip install llama-cpp-python
+```
+
+#### Windows (AMD GPU)
+
+ROCm / HIP n'est pas disponible sur Windows. Utilisez le **mode llama-server** avec un binaire **Vulkan** pré-compilé (voir section [Mode llama-server](#mode-llama-server-sans-compilation)).
+
 #### CPU uniquement (fallback)
 
 ```bash
@@ -125,6 +137,28 @@ pip install torch torchvision
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
+
+#### Linux (AMD GPU — ROCm)
+
+Pour les GPU AMD (Radeon RX, Instinct), installer la version ROCm de PyTorch :
+
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
+```
+
+> ⚠️ **ROCm est uniquement disponible sur Linux.** Pour Windows, voir la section DirectML ci-dessous.
+
+#### Windows (AMD GPU — DirectML)
+
+Pour les GPU AMD sur Windows (Radeon RX, Radeon Pro), ROCm n'est pas disponible.
+Utilisez **torch-directml** qui s'appuie sur DirectX 12 :
+
+```bash
+pip install torch-directml
+```
+
+> `torch-directml` fonctionne avec les GPU AMD, Intel et NVIDIA sur Windows.
+> Il est utilisé automatiquement par ComputeLLM si aucun autre backend GPU (CUDA/ROCm/XPU) n'est détecté.
 
 #### Windows / Linux (Intel GPU — XPU)
 
@@ -221,12 +255,15 @@ Les modèles sont téléchargés automatiquement depuis Hugging Face lors du pre
 
 ### Benchmarks classiques
 
-| Métrique              | Description                      |
-| --------------------- | -------------------------------- |
-| GFLOPS (ST)           | Performance CPU single-thread    |
-| GFLOPS (MT)           | Performance CPU multi-thread     |
-| Bande passante (Go/s) | Lecture, écriture, copie mémoire |
-| GFLOPS GPU            | Performance GPU (CUDA/Metal)     |
+| Métrique                  | Description                                         |
+| ------------------------- | --------------------------------------------------- |
+| GFLOPS (ST)               | Performance CPU single-thread                       |
+| GFLOPS (MT)               | Performance CPU multi-thread                        |
+| Bande passante (Go/s)     | Lecture, écriture, copie mémoire                    |
+| GFLOPS GPU Raw            | Performance GPU pure (matmul + sync uniquement)     |
+| GFLOPS GPU Pipeline       | Performance GPU end-to-end (CPU→GPU→calcul→GPU→CPU) |
+| Transfert CPU↔GPU (Go/s)  | Bande passante transfert CPU→GPU et GPU→CPU         |
+| Répartition temps GPU (%) | % calcul vs % transfert dans le pipeline GPU        |
 
 ### Benchmarks IA
 
@@ -278,35 +315,50 @@ Un thread de monitoring tourne en arrière-plan pendant chaque phase :
 | -------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Outil          | `numpy.dot` (float32)                                                                                                   |
 | Tailles        | 512×512, 1024×1024, 2048×2048                                                                                           |
+| Warmup         | 1 passe non chronométrée par taille (stabilisation fréquence CPU + caches)                                              |
 | Itérations     | 3 par taille                                                                                                            |
+| Isolation      | **Sous-processus isolé** avec env vars définies AVANT l'import de NumPy                                                 |
 | Thread forcing | `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, `VECLIB_MAXIMUM_THREADS=1`, `NUMEXPR_NUM_THREADS=1` |
 
-**Calcul** : pour chaque taille $N$, on mesure le temps moyen sur 3 runs, puis :
+> ⚠️ Le forçage single-thread nécessite un sous-processus isolé car les variables d'environnement BLAS doivent être
+> définies **avant** l'import de NumPy. Dans le processus principal, NumPy est déjà chargé.
 
-$$\text{GFLOPS} = \frac{2 \times N^3}{\text{temps\_moyen} \times 10^9}$$
+**Calcul** : pour chaque taille $N$, on prend le **temps médian** sur 3 runs (plus robuste aux outliers), puis :
+
+$$\text{GFLOPS} = \frac{2 \times N^3}{\text{temps\_médian} \times 10^9}$$
 
 ---
 
 ### Phase 2 — CPU Multi-Thread
 
-| Paramètre  | Valeur                                          |
-| ---------- | ----------------------------------------------- |
-| Outil      | `numpy.dot` (float32)                           |
-| Tailles    | 512×512, 1024×1024, 2048×2048                   |
-| Itérations | 3 par taille                                    |
-| Threads    | Tous les cœurs disponibles (via MKL / OpenBLAS) |
+| Paramètre  | Valeur                                                                          |
+| ---------- | ------------------------------------------------------------------------------- |
+| Outil      | `numpy.dot` (float32)                                                           |
+| Tailles    | 512×512, 1024×1024, 2048×2048                                                   |
+| Warmup     | 1 passe non chronométrée par taille (stabilisation fréquence CPU)               |
+| Itérations | 3 par taille                                                                    |
+| Threads    | Tous les cœurs disponibles (via Accelerate / MKL / OpenBLAS)                    |
+| Isolation  | **Sous-processus isolé** (même méthode que la phase 1, sans restriction thread) |
 
-Même formule GFLOPS que la phase 1, mais avec tous les threads actifs.
+> 💡 Le sous-processus garantit zéro interférence avec le thread de monitoring et Streamlit,
+> ce qui améliore la reproductibilité des mesures.
+
+Même formule GFLOPS que la phase 1 (temps médian), avec tous les threads actifs.
+
+> ⚠️ **Apple Silicon** : sur M1/M2/M3, le coprocesseur AMX effectue les multiplications
+> matricielles de manière quasi-indépendante du nombre de threads. Il est normal que
+> les performances single-thread soient proches (voire supérieures) au multi-thread.
 
 ---
 
 ### Phase 3 — Bande passante mémoire (RAM)
 
-| Paramètre      | Valeur          |
-| -------------- | --------------- |
-| Outil          | NumPy (float64) |
-| Taille du bloc | 256 Mo          |
-| Itérations     | 3 par opération |
+| Paramètre      | Valeur                                                      |
+| -------------- | ----------------------------------------------------------- |
+| Outil          | NumPy (float64)                                             |
+| Taille du bloc | 256 Mo                                                      |
+| Warmup         | 1 passe non chronométrée par opération (pages, caches, TLB) |
+| Itérations     | 3 par opération                                             |
 
 Trois opérations sont mesurées :
 
@@ -318,26 +370,28 @@ Trois opérations sont mesurées :
 
 **Calcul** :
 
-$$\text{Bande passante (Go/s)} = \frac{\text{taille\_données\_Go}}{\text{temps\_moyen}}$$
+$$\text{Bande passante (Go/s)} = \frac{\text{taille\_données\_Go}}{\text{temps\_médian}}$$
 
 ---
 
-### Phase 4 — GPU Compute
+### Phase 4 — GPU Raw Compute
 
-| Paramètre | Valeur                                         |
-| --------- | ---------------------------------------------- |
-| Outil     | `torch.mm` (PyTorch, float32)                  |
-| Tailles   | 1024×1024, 2048×2048, 4096×4096                |
-| Warmup    | 1 run (non comptabilisé)                       |
-| Runs      | 3 par taille                                   |
-| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · MPS (Apple) |
+| Paramètre | Valeur                                                              |
+| --------- | ------------------------------------------------------------------- |
+| Outil     | `torch.mm` (PyTorch, float32)                                       |
+| Tailles   | 1024×1024, 2048×2048, 4096×4096                                     |
+| Warmup    | 1 run (non comptabilisé)                                            |
+| Runs      | 3 par taille                                                        |
+| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · DirectML (Windows) · MPS (Apple) |
 
 **Déroulement** :
 
-1. Détection automatique du backend GPU (priorité : CUDA → XPU/IPEX → MPS)
+1. Détection automatique du backend GPU (priorité : CUDA → ROCm → XPU/IPEX → DirectML → MPS)
 2. Warmup : 1 multiplication non chronométrée pour initialiser le GPU
-3. Pour chaque taille, 3 runs chronométrés avec synchronisation (`torch.cuda.synchronize()` / `torch.xpu.synchronize()` / `torch.mps.synchronize()`)
-4. Calcul GFLOPS identique aux phases CPU
+3. Pour chaque taille, 3 runs chronométrés avec synchronisation (`torch.cuda.synchronize()` / `torch.xpu.synchronize()` / `torch.mps.synchronize()` / `.item()` pour DirectML)
+4. Calcul GFLOPS identique aux phases CPU (temps médian)
+
+**Ce test mesure la puissance de calcul brute du GPU**, sans inclure le temps de transfert des données entre CPU et GPU.
 
 **Protection Level Zero** : si le driver Intel crashe (`UR_RESULT_ERROR_UNKNOWN`), le benchmark GPU est ignoré proprement avec un message d'aide.
 
@@ -345,16 +399,54 @@ Si aucun GPU compatible n'est détecté, la phase est marquée « Ignoré » ave
 
 ---
 
-### Phase 5 — Inférence IA (modèles LLM)
+### Phase 5 — GPU System Score
+
+| Paramètre | Valeur                                                              |
+| --------- | ------------------------------------------------------------------- |
+| Outil     | `torch.mm` (PyTorch, float32)                                       |
+| Tailles   | 1024×1024, 2048×2048, 4096×4096                                     |
+| Warmup    | 1 run (non comptabilisé)                                            |
+| Runs      | 3 par taille                                                        |
+| Backends  | CUDA (NVIDIA) · SYCL/XPU (Intel) · DirectML (Windows) · MPS (Apple) |
+
+**Déroulement** (pour chaque taille) :
+
+1. Allocation de deux matrices float32 sur CPU (`torch.randn` avec seed fixe)
+2. **Transfert CPU → GPU** : `A_gpu = A_cpu.to(device)` — chronométré
+3. **Calcul GPU** : `C = torch.mm(A_gpu, B_gpu)` + synchronisation — chronométré
+4. **Transfert GPU → CPU** : `C_cpu = C_gpu.cpu()` — chronométré
+5. **Pipeline total** = somme des 3 étapes
+
+**Métriques calculées** :
+
+| Métrique                 | Formule                                                                  |
+| ------------------------ | ------------------------------------------------------------------------ |
+| GFLOPS pipeline          | $\frac{2 \times N^3}{\text{pipeline\_médian} \times 10^9}$               |
+| GFLOPS compute           | $\frac{2 \times N^3}{\text{compute\_médian} \times 10^9}$                |
+| Bande passante transfert | $\frac{3 \times N^2 \times 4}{\text{transfert\_total} \times 10^9}$ Go/s |
+| % Calcul                 | $\frac{\text{compute}}{\text{pipeline}} \times 100$                      |
+| % Transfert CPU→GPU      | $\frac{\text{transfer\_to}}{\text{pipeline}} \times 100$                 |
+| % Transfert GPU→CPU      | $\frac{\text{transfer\_back}}{\text{pipeline}} \times 100$               |
+
+> 💡 **Mémoire unifiée (Apple Silicon)** : sur M1/M2/M3/M4, CPU et GPU partagent la même RAM.
+> Les « transferts » sont en réalité des remappages de pages mémoire, quasi-instantanés.
+> Le % transfert sera donc très faible (~1-5%) comparé à un GPU discret (~10-30%).
+
+> 💡 **Comparaison inter-machines** : ce score permet de comparer l'efficacité réelle du
+> pipeline GPU, incluant le bus PCIe (GPU discret) vs la mémoire unifiée (Apple Silicon).
+
+---
+
+### Phase 6 — Inférence IA (modèles LLM)
 
 Pour **chaque modèle sélectionné** (ex : TinyLlama 1.1B, Mistral 7B…) :
 
-#### 5.1 — Pré-vérifications
+#### 6.1 — Pré-vérifications
 
 - **RAM disponible** : si la RAM totale < RAM minimale requise par le modèle → skip
 - **Téléchargement** : si le fichier GGUF n'est pas déjà présent dans `models/`, il est téléchargé automatiquement depuis Hugging Face
 
-#### 5.2 — Détection du backend
+#### 6.2 — Détection du backend
 
 Ordre de priorité :
 
@@ -363,19 +455,19 @@ Ordre de priorité :
 3. **Apple** → Metal (`n_gpu_layers = -1`)
 4. **Aucun** → CPU uniquement (`n_gpu_layers = 0`)
 
-#### 5.3 — Chargement du modèle
+#### 6.3 — Chargement du modèle
 
 - Bibliothèque : `llama-cpp-python` (mode natif) ou `llama-server` (mode serveur HTTP)
 - Contexte : `n_ctx = 2048` tokens
 - Seed : `42` (reproductibilité)
 - Le temps de chargement est mesuré (`model_load_time_s`)
 
-#### 5.4 — Échauffement (warmup)
+#### 6.4 — Échauffement (warmup)
 
-- **1 run** avec `max_tokens = 32` (résultat ignoré)
-- But : initialiser les caches KV et le runtime GPU
+- **2 runs** avec `max_tokens = 32` (résultats ignorés)
+- But : initialiser les caches KV, le runtime GPU et stabiliser la fréquence CPU
 
-#### 5.5 — Runs de benchmark
+#### 6.5 — Runs de benchmark
 
 - **3 runs** consécutifs, chacun mesuré individuellement
 - Le `ResourceMonitor` tourne en arrière-plan pendant les 3 runs
@@ -566,35 +658,27 @@ Modifiez `src/config.py` pour ajuster :
 
 ### Haute priorité
 
-- [ ] **Détection matérielle**
-  - Ajouter la détection des GPU AMD :
-    - `rocm-smi` (Linux)
-    - `lspci` (fallback Linux)
-    - WMI / Win32_VideoController (Windows)
-  - Ajouter la détection des GPU Intel (Arc / XPU) :
-    - `xpu-smi`
-    - Level Zero
-    - `lspci` (Linux)
-    - WMI (Windows)
-  - Ajouter les backends détectés : `rocm`, `xpu`, `sycl`
+- [x] **Détection matérielle** — ✅ Support AMD complet
+  - ~~Ajouter la détection des GPU AMD~~ ✔️
+    - `rocm-smi` (Linux) ✔️
+    - `lspci` (fallback Linux) ✔️
+    - WMI / Win32_VideoController (Windows) ✔️
+    - PyTorch ROCm (`torch.version.hip`) ✔️
+  - ~~Ajouter la détection des GPU Intel (Arc / XPU)~~ ✔️
+  - ~~Ajouter les backends détectés : `rocm`, `xpu`, `sycl`~~ ✔️
 
-- [ ] **Benchmark classique GPU**
-  - Support explicite AMD ROCm (identifier via `torch.version.hip`)
-  - Support Intel XPU (`torch.xpu.is_available()`)
-  - Synchronisation adaptée par device :
-    - `torch.cuda.synchronize()`
-    - `torch.xpu.synchronize()`
-    - `torch.mps.synchronize()`
-  - Ajouter monitoring :
-    - AMD : `rocm-smi --showuse --showmemuse --showtemp`
-    - Intel : `xpu-smi dump` / `intel_gpu_top`
-  - Distinguer CUDA vs ROCm dans l’affichage des résultats
+- [x] **Benchmark classique GPU** — ✅ Support AMD complet
+  - ~~Support explicite AMD ROCm (identifier via `torch.version.hip`)~~ ✔️
+  - ~~Support Intel XPU (`torch.xpu.is_available()`)~~ ✔️
+  - ~~Synchronisation adaptée par device~~ ✔️ (ROCm utilise `torch.cuda.synchronize()`)
+  - ~~Ajouter monitoring AMD : `rocm-smi --showuse --showmemuse --showtemp`~~ ✔️
+  - ~~Distinguer CUDA vs ROCm dans l’affichage des résultats~~ ✔️
 
 - [ ] **Benchmark AI / LLM**
   - Étendre `detect_best_backend()` :
-    - ROCm (HIPBLAS)
+    - ~~ROCm (HIPBLAS)~~ ✔️
     - Vulkan
-    - SYCL (Intel)
+    - ~~SYCL (Intel)~~ ✔️
     - CLBlast / OpenCL (fallback générique)
   - Gérer explicitement les backends llama-cpp-python :
     - `-DGGML_CUDA=on`
@@ -614,7 +698,7 @@ Modifiez `src/config.py` pour ajuster :
   - Ajouter un script d’installation automatique par OS
   - Afficher un avertissement si version CPU-only détectée - ~~Mode llama-server comme alternative sans compilation~~ ✅
 - [ ] **Monitoring unifié**
-  - Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`
+  - ~~Agréger les métriques NVIDIA / AMD / Intel dans `ResourceMonitor`~~ ✔️
   - Normaliser le format des métriques (utilisation %, VRAM, température)
 
 ---
@@ -656,3 +740,17 @@ Modifiez `src/config.py` pour ajuster :
 - Sur Apple Silicon, la mémoire unifiée est partagée entre CPU et GPU.
 - Les résultats varient selon la charge système et la température du processeur.
 - Pour des résultats reproductibles, fermez les applications gourmandes en ressources.
+
+---
+
+## Compatibilité GPU par plateforme
+
+| Plateforme      | GPU    | Benchmark classique (PyTorch) | Benchmark IA (LLM)                               |
+| --------------- | ------ | ----------------------------- | ------------------------------------------------ |
+| **Linux**       | NVIDIA | PyTorch CUDA                  | llama-cpp-python (CUDA) ou llama-server (CUDA)   |
+| **Linux**       | AMD    | PyTorch ROCm                  | llama-cpp-python (HIPBLAS) ou llama-server (HIP) |
+| **Linux**       | Intel  | PyTorch XPU / IPEX            | llama-cpp-python (SYCL) ou llama-server (SYCL)   |
+| **Windows**     | NVIDIA | PyTorch CUDA                  | llama-cpp-python (CUDA) ou llama-server (CUDA)   |
+| **Windows**     | AMD    | `torch-directml`              | llama-server (Vulkan)                            |
+| **Windows**     | Intel  | PyTorch XPU / IPEX            | llama-server (SYCL/Vulkan)                       |
+| **macOS (ARM)** | Apple  | PyTorch MPS                   | llama-cpp-python (Metal) ou llama-server (Metal) |

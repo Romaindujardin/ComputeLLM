@@ -9,6 +9,8 @@ import threading
 import multiprocessing
 import platform
 import gc
+import json
+import re
 import subprocess
 import sys
 from typing import Dict, Any, List, Optional, Callable
@@ -202,10 +204,15 @@ class ResourceMonitor:
                 if gpu_usage:
                     sample.update(gpu_usage)
                 else:
-                    # Monitoring GPU Intel si disponible
-                    intel_usage = self._sample_intel_gpu()
-                    if intel_usage:
-                        sample.update(intel_usage)
+                    # Monitoring GPU AMD si disponible
+                    amd_usage = self._sample_amd_gpu()
+                    if amd_usage:
+                        sample.update(amd_usage)
+                    else:
+                        # Monitoring GPU Intel si disponible
+                        intel_usage = self._sample_intel_gpu()
+                        if intel_usage:
+                            sample.update(intel_usage)
 
                 self.samples.append(sample)
             except Exception:
@@ -215,6 +222,13 @@ class ResourceMonitor:
 
     def _sample_nvidia_gpu(self) -> Optional[Dict[str, Any]]:
         """Échantillonne l'utilisation GPU NVIDIA via nvidia-smi."""
+        # Ignorer nvidia-smi si on est sur ROCm (AMD)
+        try:
+            import torch
+            if hasattr(torch.version, "hip") and torch.version.hip:
+                return None
+        except (ImportError, Exception):
+            pass
         try:
             import subprocess
             result = subprocess.run(
@@ -230,6 +244,69 @@ class ResourceMonitor:
                         "gpu_memory_used_mb": float(parts[1]),
                         "gpu_memory_total_mb": float(parts[2]),
                         "gpu_temperature_c": float(parts[3]),
+                    }
+        except (FileNotFoundError, Exception):
+            pass
+        return None
+
+    def _sample_amd_gpu(self) -> Optional[Dict[str, Any]]:
+        """Échantillonne l'utilisation GPU AMD via rocm-smi."""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["rocm-smi", "--showuse", "--showmemuse", "--showtemp", "--csv"],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                gpu_data: Dict[str, Any] = {}
+                for line in lines:
+                    lower = line.lower()
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) < 2:
+                        continue
+                    val_str = parts[1].strip().rstrip('%')
+                    if "gpu use" in lower or "gpu busy" in lower:
+                        try:
+                            gpu_data["gpu_utilization_percent"] = float(val_str)
+                        except ValueError:
+                            pass
+                    elif "vram use" in lower or "gpu memory use" in lower:
+                        try:
+                            gpu_data["gpu_memory_used_mb"] = float(val_str)
+                        except ValueError:
+                            pass
+                    elif "temperature" in lower or "temp" in lower:
+                        try:
+                            gpu_data["gpu_temperature_c"] = float(val_str)
+                        except ValueError:
+                            pass
+                if "gpu_utilization_percent" in gpu_data:
+                    # Assurer des valeurs par défaut
+                    gpu_data.setdefault("gpu_memory_used_mb", 0.0)
+                    gpu_data.setdefault("gpu_temperature_c", 0.0)
+                    return gpu_data
+        except (FileNotFoundError, Exception):
+            pass
+        # Fallback: rocm-smi showgpuuse format texte
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["rocm-smi", "-u"],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                usage = 0.0
+                for line in result.stdout.strip().split('\n'):
+                    if "gpu use" in line.lower() or "busy" in line.lower():
+                        match = re.search(r'(\d+\.?\d*)', line)
+                        if match:
+                            usage = float(match.group(1))
+                if usage > 0:
+                    return {
+                        "gpu_utilization_percent": usage,
+                        "gpu_memory_used_mb": 0.0,
+                        "gpu_temperature_c": 0.0,
                     }
         except (FileNotFoundError, Exception):
             pass
@@ -317,26 +394,79 @@ def _matrix_multiply_task(size: int) -> float:
     return elapsed
 
 
-def _worker_single_thread(size: int) -> float:
-    """Worker pour benchmark single-thread (force 1 thread NumPy)."""
-    # Forcer single-thread via variables d'environnement
-    # (doit être fait avant l'import de NumPy dans le sous-processus)
-    import os
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-    os.environ["OPENBLAS_NUM_THREADS"] = "1"
-    os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-    os.environ["NUMEXPR_NUM_THREADS"] = "1"
+def _run_matmul_subprocess(
+    size: int,
+    n_iterations: int,
+    max_threads: Optional[int] = None,
+) -> List[float]:
+    """
+    Exécute les multiplications matricielles dans un sous-processus isolé.
 
-    # Recréer les matrices avec un seul thread
+    Lancer un sous-processus frais garantit :
+    - Aucune interférence avec le thread de monitoring ou Streamlit
+    - Un environnement BLAS propre (variables d'env appliquées AVANT l'import NumPy)
+    - Des résultats reproductibles indépendants de l'état du processus principal
+
+    Args:
+        size: Taille de la matrice carrée (ex. 2048 pour 2048x2048).
+        n_iterations: Nombre de multiplications chronométrées.
+        max_threads: Nombre max de threads BLAS.
+                     1 = single-thread, None = défaut système (multi-thread).
+
+    Returns:
+        Liste des temps d'exécution (en secondes) pour chaque itération.
+    """
+    # Construction du bloc de configuration des threads
+    if max_threads is not None:
+        thread_setup = (
+            f'import os\n'
+            f'os.environ["OMP_NUM_THREADS"] = "{max_threads}"\n'
+            f'os.environ["MKL_NUM_THREADS"] = "{max_threads}"\n'
+            f'os.environ["OPENBLAS_NUM_THREADS"] = "{max_threads}"\n'
+            f'os.environ["VECLIB_MAXIMUM_THREADS"] = "{max_threads}"\n'
+            f'os.environ["NUMEXPR_NUM_THREADS"] = "{max_threads}"\n'
+        )
+    else:
+        thread_setup = ""  # Laisser le défaut système (tous les threads)
+
+    script = f"""
+{thread_setup}
+import numpy as np
+import time
+import json
+
+np.random.seed(42)
+size = {size}
+n_iters = {n_iterations}
+
+# Warmup : stabiliser frequence CPU et caches
+A = np.random.rand(size, size).astype(np.float32)
+B = np.random.rand(size, size).astype(np.float32)
+_ = np.dot(A, B)
+
+times = []
+for i in range(n_iters):
     A = np.random.rand(size, size).astype(np.float32)
     B = np.random.rand(size, size).astype(np.float32)
-
     start = time.perf_counter()
     _ = np.dot(A, B)
     elapsed = time.perf_counter() - start
+    times.append(elapsed)
 
-    return elapsed
+print(json.dumps(times))
+"""
+    label = f"{max_threads}-thread" if max_threads else "multi-thread"
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True, text=True, timeout=600,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Erreur sous-processus {label}: {result.stderr[:500]}"
+        )
+    # Parser la dernière ligne (ignorer d'éventuels warnings NumPy)
+    output_lines = result.stdout.strip().split('\n')
+    return json.loads(output_lines[-1])
 
 
 def benchmark_cpu_single_thread(
@@ -346,7 +476,7 @@ def benchmark_cpu_single_thread(
 ) -> Dict[str, Any]:
     """
     Benchmark CPU single-thread via multiplication matricielle.
-    Force NumPy à utiliser un seul thread.
+    Force NumPy à utiliser un seul thread via un sous-processus isolé.
     """
     if matrix_sizes is None:
         matrix_sizes = CLASSIC_BENCHMARK_CONFIG["matrix_sizes"]
@@ -354,30 +484,37 @@ def benchmark_cpu_single_thread(
         n_iterations = CLASSIC_BENCHMARK_CONFIG["n_iterations"]
 
     results = {}
-    total_steps = len(matrix_sizes) * n_iterations
-    current_step = 0
 
-    for size in matrix_sizes:
-        times = []
-        for i in range(n_iterations):
-            # Exécuter dans un sous-processus pour garantir le single-thread
-            elapsed = _worker_single_thread(size)
-            times.append(elapsed)
-            current_step += 1
-            if progress_callback:
-                progress_callback(current_step / total_steps, f"CPU ST - Matrice {size}x{size} ({i+1}/{n_iterations})")
+    for idx, size in enumerate(matrix_sizes):
+        if progress_callback:
+            progress_callback(
+                idx / len(matrix_sizes),
+                f"CPU ST - Matrice {size}x{size} (sous-processus)...",
+            )
 
-        gflops = (2 * size**3) / (np.mean(times) * 1e9)
+        # Exécution dans un sous-processus isolé avec env vars single-thread
+        # + warmup intégré pour stabiliser la fréquence CPU
+        times = _run_matmul_subprocess(size, n_iterations, max_threads=1)
+
+        median_time = float(np.median(times))
+        gflops = (2 * size**3) / (median_time * 1e9)
         results[f"{size}x{size}"] = {
             "times_s": [round(t, 4) for t in times],
-            "mean_s": round(np.mean(times), 4),
-            "std_s": round(np.std(times), 4),
+            "mean_s": round(float(np.mean(times)), 4),
+            "median_s": round(median_time, 4),
+            "std_s": round(float(np.std(times)), 4),
             "gflops": round(gflops, 2),
         }
 
+        if progress_callback:
+            progress_callback(
+                (idx + 1) / len(matrix_sizes),
+                f"CPU ST - {size}x{size} terminé ({gflops:.1f} GFLOPS)",
+            )
+
     return {
         "test": "CPU Single-Thread",
-        "method": "Matrix multiplication (NumPy, 1 thread)",
+        "method": "Matrix multiplication (NumPy, 1 thread, subprocess isolé)",
         "results": results,
     }
 
@@ -389,7 +526,9 @@ def benchmark_cpu_multi_thread(
 ) -> Dict[str, Any]:
     """
     Benchmark CPU multi-thread via multiplication matricielle.
-    Utilise tous les threads disponibles via NumPy (MKL/OpenBLAS).
+    Utilise tous les threads disponibles via NumPy (Accelerate/MKL/OpenBLAS).
+    Exécuté dans un sous-processus isolé pour éviter l'interférence
+    du thread de monitoring et de Streamlit.
     """
     if matrix_sizes is None:
         matrix_sizes = CLASSIC_BENCHMARK_CONFIG["matrix_sizes"]
@@ -397,29 +536,37 @@ def benchmark_cpu_multi_thread(
         n_iterations = CLASSIC_BENCHMARK_CONFIG["n_iterations"]
 
     results = {}
-    total_steps = len(matrix_sizes) * n_iterations
-    current_step = 0
 
-    for size in matrix_sizes:
-        times = []
-        for i in range(n_iterations):
-            elapsed = _matrix_multiply_task(size)
-            times.append(elapsed)
-            current_step += 1
-            if progress_callback:
-                progress_callback(current_step / total_steps, f"CPU MT - Matrice {size}x{size} ({i+1}/{n_iterations})")
+    for idx, size in enumerate(matrix_sizes):
+        if progress_callback:
+            progress_callback(
+                idx / len(matrix_sizes),
+                f"CPU MT - Matrice {size}x{size} (sous-processus)...",
+            )
 
-        gflops = (2 * size**3) / (np.mean(times) * 1e9)
+        # Exécution dans un sous-processus isolé sans restriction de threads
+        # + warmup intégré pour stabiliser la fréquence CPU
+        times = _run_matmul_subprocess(size, n_iterations, max_threads=None)
+
+        median_time = float(np.median(times))
+        gflops = (2 * size**3) / (median_time * 1e9)
         results[f"{size}x{size}"] = {
             "times_s": [round(t, 4) for t in times],
-            "mean_s": round(np.mean(times), 4),
-            "std_s": round(np.std(times), 4),
+            "mean_s": round(float(np.mean(times)), 4),
+            "median_s": round(median_time, 4),
+            "std_s": round(float(np.std(times)), 4),
             "gflops": round(gflops, 2),
         }
 
+        if progress_callback:
+            progress_callback(
+                (idx + 1) / len(matrix_sizes),
+                f"CPU MT - {size}x{size} terminé ({gflops:.1f} GFLOPS)",
+            )
+
     return {
         "test": "CPU Multi-Thread",
-        "method": f"Matrix multiplication (NumPy, {psutil.cpu_count()} threads)",
+        "method": f"Matrix multiplication (NumPy, {psutil.cpu_count()} threads, subprocess isolé)",
         "n_threads": psutil.cpu_count(),
         "results": results,
     }
@@ -447,10 +594,17 @@ def benchmark_memory_bandwidth(
     data_size_gb = (n_elements * 8) / (1024**3)
 
     results = {}
-    total_ops = 3 * n_iterations  # 3 tests × n_iterations
+    total_ops = 3 * (n_iterations + 1)  # 3 tests × (warmup + n_iterations)
     current_step = 0
 
     # Test d'écriture
+    # Warmup : 1 allocation pour initialiser les pages mémoire et TLB
+    _w = np.ones(n_elements, dtype=np.float64)
+    del _w
+    current_step += 1
+    if progress_callback:
+        progress_callback(current_step / total_ops, "Mémoire - Warmup écriture")
+
     write_times = []
     for i in range(n_iterations):
         start = time.perf_counter()
@@ -461,13 +615,21 @@ def benchmark_memory_bandwidth(
         if progress_callback:
             progress_callback(current_step / total_ops, f"Mémoire - Écriture ({i+1}/{n_iterations})")
 
+    median_write = float(np.median(write_times))
     results["write"] = {
-        "mean_s": round(np.mean(write_times), 4),
-        "bandwidth_gb_s": round(data_size_gb / np.mean(write_times), 2),
+        "mean_s": round(float(np.mean(write_times)), 4),
+        "median_s": round(median_write, 4),
+        "bandwidth_gb_s": round(data_size_gb / median_write, 2),
     }
 
     # Test de lecture
     a = np.ones(n_elements, dtype=np.float64)
+    # Warmup : 1 lecture pour initialiser les caches
+    _ = np.sum(a)
+    current_step += 1
+    if progress_callback:
+        progress_callback(current_step / total_ops, "Mémoire - Warmup lecture")
+
     read_times = []
     for i in range(n_iterations):
         start = time.perf_counter()
@@ -478,12 +640,21 @@ def benchmark_memory_bandwidth(
         if progress_callback:
             progress_callback(current_step / total_ops, f"Mémoire - Lecture ({i+1}/{n_iterations})")
 
+    median_read = float(np.median(read_times))
     results["read"] = {
-        "mean_s": round(np.mean(read_times), 4),
-        "bandwidth_gb_s": round(data_size_gb / np.mean(read_times), 2),
+        "mean_s": round(float(np.mean(read_times)), 4),
+        "median_s": round(median_read, 4),
+        "bandwidth_gb_s": round(data_size_gb / median_read, 2),
     }
 
     # Test de copie
+    # Warmup : 1 copie pour initialiser les chemins mémoire
+    _c = a.copy()
+    del _c
+    current_step += 1
+    if progress_callback:
+        progress_callback(current_step / total_ops, "Mémoire - Warmup copie")
+
     copy_times = []
     for i in range(n_iterations):
         start = time.perf_counter()
@@ -494,9 +665,11 @@ def benchmark_memory_bandwidth(
         if progress_callback:
             progress_callback(current_step / total_ops, f"Mémoire - Copie ({i+1}/{n_iterations})")
 
+    median_copy = float(np.median(copy_times))
     results["copy"] = {
-        "mean_s": round(np.mean(copy_times), 4),
-        "bandwidth_gb_s": round(data_size_gb / np.mean(copy_times), 2),
+        "mean_s": round(float(np.mean(copy_times)), 4),
+        "median_s": round(median_copy, 4),
+        "bandwidth_gb_s": round(data_size_gb / median_copy, 2),
     }
 
     del a, b
@@ -513,113 +686,280 @@ def benchmark_memory_bandwidth(
 # Benchmark GPU (via PyTorch si disponible)
 # =============================================================================
 
-def benchmark_gpu(
-    progress_callback: Optional[Callable] = None,
+def _detect_gpu_device(
+    selected_gpu: dict = None,
+    test_label: str = "GPU",
 ) -> Dict[str, Any]:
     """
-    Benchmark GPU via PyTorch (CUDA ou MPS).
-    Effectue des multiplications matricielles sur le GPU.
+    Détecte le device GPU PyTorch à utiliser.
+
+    Retourne un dict avec :
+      - "device": torch.device ou None
+      - "device_name": str
+      - "backend": str
+      - "dev_idx": int
+      - "skip_result": dict ou None (si GPU non trouvé, contient le résultat à renvoyer)
+
+    Ordre de priorité : CUDA/ROCm → XPU/IPEX → DirectML → MPS
     """
     try:
         import torch
     except ImportError:
         return {
-            "test": "GPU Compute",
-            "status": "skipped",
-            "reason": "PyTorch non installé",
+            "device": None,
+            "device_name": "",
+            "backend": "",
+            "dev_idx": 0,
+            "skip_result": {
+                "test": test_label,
+                "status": "skipped",
+                "reason": "PyTorch non installé",
+            },
         }
 
-    # Déterminer le device
     device = None
     device_name = ""
     backend = ""
+    dev_idx = selected_gpu.get("device_index", 0) if selected_gpu else 0
 
     if torch.cuda.is_available():
-        device = torch.device("cuda")
-        device_name = torch.cuda.get_device_name(0)
-        backend = "CUDA"
+        if dev_idx >= torch.cuda.device_count():
+            dev_idx = 0
+        device = torch.device(f"cuda:{dev_idx}")
+        device_name = torch.cuda.get_device_name(dev_idx)
+        if hasattr(torch.version, "hip") and torch.version.hip:
+            backend = f"ROCm/HIP {torch.version.hip}"
+        else:
+            backend = "CUDA"
     else:
-        # Tester XPU (Intel) — enveloppé dans try/except car Level Zero
-        # peut crasher sur certains GPU intégrés (Iris, UHD)
         try:
             if hasattr(torch, "xpu") and torch.xpu.is_available():
-                device = torch.device("xpu")
+                xpu_idx = dev_idx if dev_idx < torch.xpu.device_count() else 0
+                device = torch.device(f"xpu:{xpu_idx}")
+                dev_idx = xpu_idx
                 try:
-                    device_name = torch.xpu.get_device_name(0)
+                    device_name = torch.xpu.get_device_name(xpu_idx)
                 except Exception:
                     device_name = "Intel GPU (XPU)"
                 backend = "SYCL/XPU"
         except Exception:
-            pass  # Level Zero / driver crash — on continue
+            pass
 
-        # Tenter d'activer XPU via intel-extension-for-pytorch (IPEX)
         if device is None:
             try:
                 import intel_extension_for_pytorch as ipex  # noqa: F401
                 if hasattr(torch, "xpu") and torch.xpu.is_available():
-                    device = torch.device("xpu")
+                    xpu_idx = dev_idx if dev_idx < torch.xpu.device_count() else 0
+                    device = torch.device(f"xpu:{xpu_idx}")
+                    dev_idx = xpu_idx
                     try:
-                        device_name = torch.xpu.get_device_name(0)
+                        device_name = torch.xpu.get_device_name(xpu_idx)
                     except Exception:
                         device_name = "Intel GPU (XPU via IPEX)"
                     backend = "SYCL/XPU (IPEX)"
             except Exception:
-                pass  # IPEX non installé ou Level Zero crash
+                pass
 
-    # MPS (Apple Silicon)
+    if device is None:
+        try:
+            import torch_directml
+            if torch_directml.is_available():
+                dml_count = torch_directml.device_count()
+                dml_idx = dev_idx if dev_idx < dml_count else 0
+                device = torch_directml.device(dml_idx)
+                dev_idx = dml_idx
+                device_name = torch_directml.device_name(dml_idx)
+                backend = "DirectML"
+        except ImportError:
+            pass
+
     if device is None:
         if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             device = torch.device("mps")
             device_name = "Apple Silicon (MPS)"
             backend = "Metal/MPS"
 
-    # Aucun backend GPU trouvé — message d'aide contextuel
     if device is None:
-        reason = "Aucun GPU compatible (CUDA/XPU/MPS) détecté"
+        reason = "Aucun GPU compatible (CUDA/ROCm/XPU/DirectML/MPS) détecté"
         advice = ""
 
-        # Vérifier si un GPU Intel est physiquement présent
         try:
-            from src.hardware_detect import _detect_intel_gpu
-            intel_gpu = _detect_intel_gpu()
-            if intel_gpu:
-                gpu_name = intel_gpu.get("name", "Intel GPU")
-                # Vérifier si PyTorch est un build CUDA (inutile sur Intel)
+            from src.hardware_detect import _detect_amd_gpu
+            amd_gpus = _detect_amd_gpu()
+            if amd_gpus:
+                gpu_name = amd_gpus[0].get("name", "AMD GPU")
                 torch_version = getattr(torch, "__version__", "")
+                is_windows = platform.system() == "Windows"
                 if "+cu" in torch_version or "cuda" in torch_version.lower():
                     reason = (
-                        f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
+                        f"GPU AMD ({gpu_name}) détecté, mais votre PyTorch "
                         f"({torch_version}) est compilé pour CUDA (NVIDIA)."
                     )
-                    advice = (
-                        "Pour benchmarker votre GPU Intel, installez PyTorch "
-                        "avec le support XPU et intel-extension-for-pytorch :\n"
-                        "pip install intel-extension-for-pytorch"
-                    )
+                    if is_windows:
+                        advice = (
+                            "Sur Windows, installez torch-directml pour "
+                            "benchmarker votre GPU AMD :\n"
+                            "pip install torch-directml"
+                        )
+                    else:
+                        advice = (
+                            "Pour benchmarker votre GPU AMD, installez PyTorch "
+                            "avec le support ROCm :\n"
+                            "pip install torch torchvision torchaudio "
+                            "--index-url https://download.pytorch.org/whl/rocm6.2"
+                        )
                 else:
                     reason = (
-                        f"GPU Intel ({gpu_name}) détecté, mais PyTorch n'a pas "
-                        f"le support XPU activé."
+                        f"GPU AMD ({gpu_name}) détecté, mais PyTorch n'a pas "
+                        f"le support ROCm activé."
                     )
-                    advice = (
-                        "Installez intel-extension-for-pytorch pour activer "
-                        "le support GPU Intel :\n"
-                        "pip install intel-extension-for-pytorch"
-                    )
+                    if is_windows:
+                        advice = (
+                            "ROCm n'est pas disponible sur Windows. "
+                            "Installez torch-directml pour activer le support GPU AMD :\n"
+                            "pip install torch-directml"
+                        )
+                    else:
+                        advice = (
+                            "Installez PyTorch avec le support ROCm pour activer "
+                            "le support GPU AMD :\n"
+                            "pip install torch torchvision torchaudio "
+                            "--index-url https://download.pytorch.org/whl/rocm6.2"
+                        )
         except Exception:
             pass
 
-        result = {
-            "test": "GPU Compute",
+        if not advice:
+            try:
+                from src.hardware_detect import _detect_intel_gpu
+                intel_gpus = _detect_intel_gpu()
+                if intel_gpus:
+                    gpu_name = intel_gpus[0].get("name", "Intel GPU")
+                    torch_version = getattr(torch, "__version__", "")
+                    if "+cu" in torch_version or "cuda" in torch_version.lower():
+                        reason = (
+                            f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
+                            f"({torch_version}) est compilé pour CUDA (NVIDIA)."
+                        )
+                        advice = (
+                            "Pour benchmarker votre GPU Intel, installez PyTorch "
+                            "avec le support XPU et intel-extension-for-pytorch :\n"
+                            "pip install intel-extension-for-pytorch"
+                        )
+                    else:
+                        reason = (
+                            f"GPU Intel ({gpu_name}) détecté, mais PyTorch n'a pas "
+                            f"le support XPU activé."
+                        )
+                        advice = (
+                            "Installez intel-extension-for-pytorch pour activer "
+                            "le support GPU Intel :\n"
+                            "pip install intel-extension-for-pytorch"
+                        )
+            except Exception:
+                pass
+
+        skip = {
+            "test": test_label,
             "status": "skipped",
             "reason": reason,
         }
         if advice:
-            result["advice"] = advice
-        return result
+            skip["advice"] = advice
 
-    # Exécuter les benchmarks GPU — enveloppé dans try/except pour
-    # attraper les crashs Level Zero / driver à l'exécution
+        return {
+            "device": None,
+            "device_name": "",
+            "backend": "",
+            "dev_idx": dev_idx,
+            "skip_result": skip,
+        }
+
+    return {
+        "device": device,
+        "device_name": device_name,
+        "backend": backend,
+        "dev_idx": dev_idx,
+        "skip_result": None,
+    }
+
+
+def _gpu_sync(device, C=None):
+    """Synchronise le GPU quel que soit le backend. Attend la fin du kernel."""
+    import torch
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    elif device.type == "xpu":
+        torch.xpu.synchronize()
+    elif device.type == "mps":
+        try:
+            torch.mps.synchronize()
+        except AttributeError:
+            if C is not None:
+                C.cpu()
+    elif device.type == "privateuseone":
+        if C is not None:
+            C[0, 0].item()
+
+
+def _gpu_pre_sync(device, tensor):
+    """Barrière pré-sync : attendre que les allocations GPU soient terminées."""
+    import torch
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    elif device.type == "xpu":
+        torch.xpu.synchronize()
+    elif device.type == "mps":
+        try:
+            torch.mps.synchronize()
+        except AttributeError:
+            pass
+    elif device.type == "privateuseone":
+        tensor[0, 0].item()
+
+
+def _gpu_cleanup(device):
+    """Nettoie la mémoire GPU après un benchmark."""
+    import torch
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    elif device.type == "xpu":
+        try:
+            torch.xpu.empty_cache()
+        except AttributeError:
+            pass
+    elif device.type == "mps":
+        try:
+            torch.mps.empty_cache()
+        except AttributeError:
+            pass
+
+
+def benchmark_gpu(
+    progress_callback: Optional[Callable] = None,
+    selected_gpu: dict = None,
+) -> Dict[str, Any]:
+    """
+    Benchmark GPU Raw Compute : multiplication matricielle pure.
+    Mesure uniquement la puissance de calcul du GPU (matmul + sync).
+    Aucun transfert CPU↔GPU n'est inclus dans le chronométrage.
+
+    Args:
+        progress_callback: Callback(progress, message).
+        selected_gpu: (Optionnel) Dict GPU avec 'backend' et 'device_index'.
+                     Si fourni, utilise ce GPU spécifique.
+    """
+    gpu_info = _detect_gpu_device(selected_gpu, test_label="GPU Compute (Raw)")
+    if gpu_info["skip_result"]:
+        return gpu_info["skip_result"]
+
+    import torch
+
+    device = gpu_info["device"]
+    device_name = gpu_info["device_name"]
+    backend = gpu_info["backend"]
+    dev_idx = gpu_info["dev_idx"]
+
     try:
         sizes = [1024, 2048, 4096]
         results = {}
@@ -632,68 +972,50 @@ def benchmark_gpu(
             # Warmup
             A = torch.randn(size, size, device=device, dtype=torch.float32)
             B = torch.randn(size, size, device=device, dtype=torch.float32)
-            _ = torch.mm(A, B)
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-            elif device.type == "xpu":
-                torch.xpu.synchronize()
+            C = torch.mm(A, B)
+            _gpu_sync(device, C)
 
             for i in range(3):
                 A = torch.randn(size, size, device=device, dtype=torch.float32)
                 B = torch.randn(size, size, device=device, dtype=torch.float32)
 
-                if device.type == "cuda":
-                    torch.cuda.synchronize()
-                elif device.type == "xpu":
-                    torch.xpu.synchronize()
+                _gpu_pre_sync(device, A)
 
                 start = time.perf_counter()
-                _ = torch.mm(A, B)
-
-                if device.type == "cuda":
-                    torch.cuda.synchronize()
-                elif device.type == "xpu":
-                    torch.xpu.synchronize()
-                elif device.type == "mps":
-                    # Synchronisation MPS
-                    (A + B).cpu()
-
+                C = torch.mm(A, B)
+                _gpu_sync(device, C)
                 elapsed = time.perf_counter() - start
+
                 times.append(elapsed)
                 current_step += 1
 
                 if progress_callback:
-                    progress_callback(current_step / total_steps, f"GPU - Matrice {size}x{size} ({i+1}/3)")
+                    progress_callback(current_step / total_steps, f"GPU Raw - Matrice {size}x{size} ({i+1}/3)")
 
-            gflops = (2 * size**3) / (np.mean(times) * 1e9)
+            median_time = float(np.median(times))
+            gflops = (2 * size**3) / (median_time * 1e9)
             results[f"{size}x{size}"] = {
                 "times_s": [round(t, 4) for t in times],
-                "mean_s": round(np.mean(times), 4),
+                "mean_s": round(float(np.mean(times)), 4),
+                "median_s": round(median_time, 4),
                 "gflops": round(gflops, 2),
             }
 
             del A, B
 
-        # Nettoyer la mémoire GPU
-        if device.type == "cuda":
-            torch.cuda.empty_cache()
-        elif device.type == "xpu":
-            try:
-                torch.xpu.empty_cache()
-            except AttributeError:
-                pass
+        _gpu_cleanup(device)
 
         return {
-            "test": "GPU Compute",
+            "test": "GPU Compute (Raw)",
             "status": "completed",
             "device": device_name,
             "backend": backend,
+            "gpu_index": dev_idx,
             "results": results,
         }
 
     except Exception as e:
         error_msg = str(e)
-        # Erreur Level Zero typique sur GPU Intel intégrés
         if "level_zero" in error_msg.lower() or "ur_result_error" in error_msg.lower():
             reason = (
                 f"GPU {device_name} ({backend}) détecté, mais le driver Level Zero "
@@ -710,7 +1032,175 @@ def benchmark_gpu(
             advice = ""
 
         result = {
-            "test": "GPU Compute",
+            "test": "GPU Compute (Raw)",
+            "status": "skipped",
+            "reason": reason,
+        }
+        if advice:
+            result["advice"] = advice
+        return result
+
+
+def benchmark_gpu_system(
+    progress_callback: Optional[Callable] = None,
+    selected_gpu: dict = None,
+) -> Dict[str, Any]:
+    """
+    Benchmark GPU System Score : pipeline end-to-end.
+    Mesure la performance globale GPU incluant les transferts de données :
+      1. Allocation CPU → transfert GPU
+      2. Calcul GPU (matmul)
+      3. Transfert GPU → CPU
+    Ce test révèle les différences d'architecture mémoire :
+    - Mémoire unifiée (Apple Silicon) : transferts quasi-gratuits
+    - GPU discret (NVIDIA/AMD) : coût du bus PCIe
+    - DirectML : overhead du runtime DirectX 12
+
+    Args:
+        progress_callback: Callback(progress, message).
+        selected_gpu: (Optionnel) Dict GPU avec 'backend' et 'device_index'.
+    """
+    gpu_info = _detect_gpu_device(selected_gpu, test_label="GPU System Score")
+    if gpu_info["skip_result"]:
+        return gpu_info["skip_result"]
+
+    import torch
+
+    device = gpu_info["device"]
+    device_name = gpu_info["device_name"]
+    backend = gpu_info["backend"]
+    dev_idx = gpu_info["dev_idx"]
+
+    try:
+        sizes = [1024, 2048, 4096]
+        results = {}
+        total_steps = len(sizes) * 3
+        current_step = 0
+
+        for size in sizes:
+            # Warmup complet du pipeline
+            A_cpu = torch.randn(size, size, dtype=torch.float32)
+            B_cpu = torch.randn(size, size, dtype=torch.float32)
+            A_gpu = A_cpu.to(device)
+            B_gpu = B_cpu.to(device)
+            C_gpu = torch.mm(A_gpu, B_gpu)
+            _ = C_gpu.cpu()
+            _gpu_sync(device)
+            del A_gpu, B_gpu, C_gpu
+
+            pipeline_times = []     # Temps total end-to-end
+            transfer_to_times = []  # CPU → GPU
+            compute_times = []      # Matmul pur
+            transfer_back_times = []  # GPU → CPU
+
+            for i in range(3):
+                # Préparer les données sur CPU
+                A_cpu = torch.randn(size, size, dtype=torch.float32)
+                B_cpu = torch.randn(size, size, dtype=torch.float32)
+
+                # ── Début pipeline end-to-end ──
+                start_total = time.perf_counter()
+
+                # Étape 1 : CPU → GPU
+                start_transfer = time.perf_counter()
+                A_gpu = A_cpu.to(device)
+                B_gpu = B_cpu.to(device)
+                _gpu_pre_sync(device, A_gpu)
+                transfer_to = time.perf_counter() - start_transfer
+
+                # Étape 2 : Calcul GPU
+                start_compute = time.perf_counter()
+                C_gpu = torch.mm(A_gpu, B_gpu)
+                _gpu_sync(device, C_gpu)
+                compute = time.perf_counter() - start_compute
+
+                # Étape 3 : GPU → CPU
+                start_back = time.perf_counter()
+                C_cpu = C_gpu.cpu()
+                transfer_back = time.perf_counter() - start_back
+
+                total = time.perf_counter() - start_total
+                # ── Fin pipeline ──
+
+                pipeline_times.append(total)
+                transfer_to_times.append(transfer_to)
+                compute_times.append(compute)
+                transfer_back_times.append(transfer_back)
+
+                del A_gpu, B_gpu, C_gpu, C_cpu
+                current_step += 1
+
+                if progress_callback:
+                    progress_callback(
+                        current_step / total_steps,
+                        f"GPU System - Matrice {size}x{size} ({i+1}/3)",
+                    )
+
+            # Calcul des métriques (temps médian)
+            median_pipeline = float(np.median(pipeline_times))
+            median_compute = float(np.median(compute_times))
+            median_to = float(np.median(transfer_to_times))
+            median_back = float(np.median(transfer_back_times))
+
+            # GFLOPS sur le pipeline total
+            gflops_pipeline = (2 * size**3) / (median_pipeline * 1e9)
+            # GFLOPS calcul pur (pour comparaison avec Raw)
+            gflops_compute = (2 * size**3) / (median_compute * 1e9)
+
+            # Taille des données transférées (2 matrices IN + 1 OUT, float32)
+            data_bytes = (2 + 1) * size * size * 4
+            data_gb = data_bytes / (1024**3)
+            # Bande passante effective du transfert total
+            total_transfer_time = median_to + median_back
+            transfer_bandwidth_gb_s = data_gb / total_transfer_time if total_transfer_time > 0 else 0
+
+            results[f"{size}x{size}"] = {
+                # Temps détaillés
+                "pipeline_times_s": [round(t, 4) for t in pipeline_times],
+                "pipeline_median_s": round(median_pipeline, 4),
+                "transfer_to_median_s": round(median_to, 4),
+                "compute_median_s": round(median_compute, 4),
+                "transfer_back_median_s": round(median_back, 4),
+                # GFLOPS
+                "gflops_pipeline": round(gflops_pipeline, 2),
+                "gflops_compute": round(gflops_compute, 2),
+                # Bande passante transfert
+                "transfer_bandwidth_gb_s": round(transfer_bandwidth_gb_s, 2),
+                "data_transferred_gb": round(data_gb, 4),
+                # Répartition du temps (%)
+                "pct_transfer_to": round(100 * median_to / median_pipeline, 1) if median_pipeline > 0 else 0,
+                "pct_compute": round(100 * median_compute / median_pipeline, 1) if median_pipeline > 0 else 0,
+                "pct_transfer_back": round(100 * median_back / median_pipeline, 1) if median_pipeline > 0 else 0,
+            }
+
+        _gpu_cleanup(device)
+
+        return {
+            "test": "GPU System Score",
+            "status": "completed",
+            "device": device_name,
+            "backend": backend,
+            "gpu_index": dev_idx,
+            "results": results,
+        }
+
+    except Exception as e:
+        error_msg = str(e)
+        if "level_zero" in error_msg.lower() or "ur_result_error" in error_msg.lower():
+            reason = (
+                f"GPU {device_name} ({backend}) détecté, mais le driver Level Zero "
+                f"a échoué lors de l'exécution."
+            )
+            advice = (
+                "Les GPU Intel intégrés (Iris, UHD) ont un support XPU limité. "
+                "Seuls les GPU Intel Arc et Data Center ont un support complet."
+            )
+        else:
+            reason = f"Erreur lors du benchmark GPU System ({backend}): {error_msg}"
+            advice = ""
+
+        result = {
+            "test": "GPU System Score",
             "status": "skipped",
             "reason": reason,
         }
@@ -725,6 +1215,7 @@ def benchmark_gpu(
 
 def run_all_classic_benchmarks(
     progress_callback: Optional[Callable] = None,
+    selected_gpu: dict = None,
 ) -> Dict[str, Any]:
     """
     Exécute tous les benchmarks classiques et retourne les résultats consolidés.
@@ -732,6 +1223,8 @@ def run_all_classic_benchmarks(
     Args:
         progress_callback: Fonction callback(progress: float, message: str)
                           progress entre 0.0 et 1.0
+        selected_gpu: (Optionnel) Dict GPU avec 'backend' et 'device_index'.
+                     Si fourni, utilise ce GPU spécifique pour le benchmark GPU.
     """
     all_results = {}
 
@@ -750,7 +1243,7 @@ def run_all_classic_benchmarks(
         return callback
 
     try:
-        # Phase 1: CPU Single-Thread (0% - 30%)
+        # Phase 1: CPU Single-Thread (0% - 25%)
         try:
             if progress_callback:
                 progress_callback(0.0, "Nettoyage mémoire avant CPU Single-Thread...")
@@ -758,7 +1251,7 @@ def run_all_classic_benchmarks(
             if progress_callback:
                 progress_callback(0.0, "Démarrage benchmark CPU Single-Thread...")
             all_results["cpu_single_thread"] = benchmark_cpu_single_thread(
-                progress_callback=sub_progress(0.0, 0.30)
+                progress_callback=sub_progress(0.0, 0.25)
             )
         except Exception as e:
             all_results["cpu_single_thread"] = {
@@ -766,15 +1259,15 @@ def run_all_classic_benchmarks(
                 "error": str(e),
             }
 
-        # Phase 2: CPU Multi-Thread (30% - 60%)
+        # Phase 2: CPU Multi-Thread (25% - 50%)
         try:
             if progress_callback:
-                progress_callback(0.30, "Nettoyage mémoire avant CPU Multi-Thread...")
+                progress_callback(0.25, "Nettoyage mémoire avant CPU Multi-Thread...")
             system_cleanup("CPU Multi-Thread", verbose=False)
             if progress_callback:
-                progress_callback(0.30, "Démarrage benchmark CPU Multi-Thread...")
+                progress_callback(0.25, "Démarrage benchmark CPU Multi-Thread...")
             all_results["cpu_multi_thread"] = benchmark_cpu_multi_thread(
-                progress_callback=sub_progress(0.30, 0.30)
+                progress_callback=sub_progress(0.25, 0.25)
             )
         except Exception as e:
             all_results["cpu_multi_thread"] = {
@@ -782,15 +1275,15 @@ def run_all_classic_benchmarks(
                 "error": str(e),
             }
 
-        # Phase 3: Mémoire (60% - 80%)
+        # Phase 3: Mémoire (50% - 65%)
         try:
             if progress_callback:
-                progress_callback(0.60, "Nettoyage mémoire avant benchmark Mémoire...")
+                progress_callback(0.50, "Nettoyage mémoire avant benchmark Mémoire...")
             system_cleanup("Mémoire", verbose=False)
             if progress_callback:
-                progress_callback(0.60, "Démarrage benchmark Mémoire...")
+                progress_callback(0.50, "Démarrage benchmark Mémoire...")
             all_results["memory_bandwidth"] = benchmark_memory_bandwidth(
-                progress_callback=sub_progress(0.60, 0.20)
+                progress_callback=sub_progress(0.50, 0.15)
             )
         except Exception as e:
             all_results["memory_bandwidth"] = {
@@ -798,19 +1291,37 @@ def run_all_classic_benchmarks(
                 "error": str(e),
             }
 
-        # Phase 4: GPU (80% - 100%)
+        # Phase 4: GPU Raw Compute (65% - 82%)
         try:
             if progress_callback:
-                progress_callback(0.80, "Nettoyage mémoire avant benchmark GPU...")
-            system_cleanup("GPU", verbose=False)
+                progress_callback(0.65, "Nettoyage mémoire avant GPU Raw Compute...")
+            system_cleanup("GPU Raw Compute", verbose=False)
             if progress_callback:
-                progress_callback(0.80, "Démarrage benchmark GPU...")
+                progress_callback(0.65, "Démarrage benchmark GPU Raw Compute...")
             all_results["gpu_compute"] = benchmark_gpu(
-                progress_callback=sub_progress(0.80, 0.20)
+                progress_callback=sub_progress(0.65, 0.17),
+                selected_gpu=selected_gpu,
             )
         except Exception as e:
             all_results["gpu_compute"] = {
-                "test": "GPU Compute", "status": "error",
+                "test": "GPU Compute (Raw)", "status": "error",
+                "error": str(e),
+            }
+
+        # Phase 5: GPU System Score (82% - 100%)
+        try:
+            if progress_callback:
+                progress_callback(0.82, "Nettoyage mémoire avant GPU System Score...")
+            system_cleanup("GPU System Score", verbose=False)
+            if progress_callback:
+                progress_callback(0.82, "Démarrage benchmark GPU System Score...")
+            all_results["gpu_system"] = benchmark_gpu_system(
+                progress_callback=sub_progress(0.82, 0.18),
+                selected_gpu=selected_gpu,
+            )
+        except Exception as e:
+            all_results["gpu_system"] = {
+                "test": "GPU System Score", "status": "error",
                 "error": str(e),
             }
 

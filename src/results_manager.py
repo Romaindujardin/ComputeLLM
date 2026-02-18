@@ -91,17 +91,35 @@ def _get_machine_name(hardware_info: Dict[str, Any]) -> str:
         else:
             parts.append("CPU")
 
-    # GPU
+    # GPU — prendre le GPU sélectionné pour le benchmark, ou le premier
     gpus = hardware_info.get("gpu", {}).get("gpus", [])
-    if gpus:
-        gpu_name = gpus[0].get("name", "")
-        gpu_type = gpus[0].get("type", "")
+    selected_gpu = hardware_info.get("selected_gpu", {})
+    if selected_gpu:
+        # Retrouver le GPU sélectionné dans la liste
+        sel_idx = selected_gpu.get("gpu_index", 0)
+        target_gpu = next((g for g in gpus if g.get("gpu_index") == sel_idx), gpus[0] if gpus else None)
+    elif gpus:
+        target_gpu = gpus[0]
+    else:
+        target_gpu = None
+
+    if target_gpu:
+        gpu_name = target_gpu.get("name", "")
+        gpu_type = target_gpu.get("type", "")
         if "NVIDIA" in gpu_name or gpu_type == "NVIDIA":
             # Extraire le nom court du GPU
             for keyword in ["RTX", "GTX", "A100", "A6000", "H100", "V100"]:
                 if keyword in gpu_name:
                     parts.append(keyword)
                     break
+        elif gpu_type == "AMD" or "AMD" in gpu_name or "Radeon" in gpu_name:
+            # Extraire le nom court du GPU AMD
+            for keyword in ["RX", "Instinct", "Radeon", "W7", "W6", "FirePro"]:
+                if keyword.lower() in gpu_name.lower():
+                    parts.append(keyword)
+                    break
+            else:
+                parts.append("AMDGPU")
         elif gpu_type == "Intel" or "Intel" in gpu_name:
             # Extraire le nom court du GPU Intel
             for keyword in ["Arc", "DG1", "DG2", "Flex", "A770", "A750", "A380"]:
@@ -164,9 +182,17 @@ def list_results() -> List[Dict[str, Any]]:
             cpu = data.get("hardware", {}).get("cpu", {})
             meta["cpu"] = cpu.get("model", "Unknown")
 
-            # Résumé GPU
+            # Résumé GPU — liste tous les GPUs et indique le GPU sélectionné
             gpus = data.get("hardware", {}).get("gpu", {}).get("gpus", [])
-            meta["gpu"] = gpus[0]["name"] if gpus else "None"
+            selected_gpu = data.get("hardware", {}).get("selected_gpu", {})
+            if selected_gpu:
+                meta["gpu"] = selected_gpu.get("name", gpus[0]["name"] if gpus else "None")
+                meta["gpu_index"] = selected_gpu.get("gpu_index", 0)
+            elif gpus:
+                meta["gpu"] = gpus[0]["name"]
+            else:
+                meta["gpu"] = "None"
+            meta["gpu_count"] = len(gpus)
 
             # Backend
             meta["backend"] = data.get("hardware", {}).get("gpu", {}).get("primary_backend", "cpu")

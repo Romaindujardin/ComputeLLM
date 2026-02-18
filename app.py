@@ -17,7 +17,7 @@ from datetime import datetime
 # Ajouter le répertoire parent au path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.hardware_detect import get_full_hardware_info, get_hardware_summary
+from src.hardware_detect import get_full_hardware_info, get_hardware_summary, detect_all_gpus
 from src.benchmark_classic import run_all_classic_benchmarks
 from src.benchmark_ai import (
     run_all_ai_benchmarks,
@@ -145,6 +145,8 @@ if "server_port" not in st.session_state:
     st.session_state.server_port = 8080
 if "server_auto_mode" not in st.session_state:
     st.session_state.server_auto_mode = True
+if "selected_gpu_index" not in st.session_state:
+    st.session_state.selected_gpu_index = 0
 
 
 # =============================================================================
@@ -237,23 +239,28 @@ def page_hardware():
 
     if gpu["gpus"]:
         for g in gpu["gpus"]:
-            cols = st.columns(4)
-            cols[0].metric("GPU", g["name"])
-            cols[1].metric("Type", g["type"])
-            cols[2].metric("Backend", g["backend"].upper())
+            gpu_idx = g.get('gpu_index', '?')
+            cols = st.columns(5)
+            cols[0].metric("GPU #", gpu_idx)
+            cols[1].metric("Nom", g["name"])
+            cols[2].metric("Type", g["type"])
+            cols[3].metric("Backend", g["backend"].upper())
 
             if "vram_total_mb" in g:
-                cols[3].metric("VRAM", f"{g['vram_total_mb']:.0f} Mo")
+                cols[4].metric("VRAM", f"{g['vram_total_mb']:.0f} Mo")
             elif "unified_memory_gb" in g:
-                cols[3].metric("Mémoire", f"{g['unified_memory_gb']} Go (unifiée)")
+                cols[4].metric("Mémoire", f"{g['unified_memory_gb']} Go (unifiée)")
             elif "vram" in g:
-                cols[3].metric("VRAM", g["vram"])
+                cols[4].metric("VRAM", g["vram"])
+            else:
+                cols[4].metric("VRAM", "N/A")
     else:
         st.warning("Aucun GPU détecté. L'inférence utilisera le CPU.")
 
     cols_backend = st.columns(3)
     cols_backend[0].metric("Backend principal", gpu["primary_backend"].upper())
     cols_backend[1].metric("Backends disponibles", ", ".join(b.upper() for b in gpu["backends"]))
+    cols_backend[2].metric("GPUs détectés", len(gpu["gpus"]))
 
     # Bibliothèques Python
     py_backends = gpu.get("python_backends", {})
@@ -268,9 +275,10 @@ def page_hardware():
         if py_backends.get("pytorch"):
             ver = py_backends.get("pytorch_version", "")
             cuda_str = f" (CUDA {py_backends['pytorch_cuda_version']})" if py_backends.get("pytorch_cuda") else ""
+            rocm_str = f" (ROCm {py_backends['pytorch_hip_version']})" if py_backends.get("pytorch_rocm") else ""
             mps_str = " (MPS)" if py_backends.get("pytorch_mps") else ""
             xpu_str = " (XPU)" if py_backends.get("pytorch_xpu") else ""
-            py_cols[1].success(f"PyTorch {ver}{cuda_str}{mps_str}{xpu_str}")
+            py_cols[1].success(f"PyTorch {ver}{cuda_str}{rocm_str}{mps_str}{xpu_str}")
         else:
             py_cols[1].warning("PyTorch non installé (GPU benchmark indisponible)")
 
@@ -285,6 +293,11 @@ def page_hardware():
             py_cols[3].success(f"IPEX {py_backends.get('ipex_version', '')}")
         elif py_backends.get("pytorch_xpu"):
             py_cols[3].info("IPEX non détecté (XPU via PyTorch)")
+        elif py_backends.get("pytorch_rocm"):
+            py_cols[3].success(f"ROCm/HIP {py_backends.get('pytorch_hip_version', '')}")
+        elif py_backends.get("directml") and py_backends.get("directml_available"):
+            device_name = py_backends.get("directml_device_name", "GPU")
+            py_cols[3].success(f"DirectML ({device_name})")
 
     # Modèles compatibles
     st.markdown("---")
@@ -351,6 +364,47 @@ def page_benchmark():
         return
 
     hw = st.session_state.hardware_info
+
+    # ─── Sélection du GPU ───
+    st.markdown("### 🎮 Sélection du GPU")
+    gpu_info = hw["gpu"]
+    gpus = gpu_info.get("gpus", [])
+
+    # Construire les options du sélecteur
+    gpu_options = []
+    for g in gpus:
+        idx = g.get('gpu_index', 0)
+        vram_str = ""
+        if "vram_total_mb" in g:
+            vram_str = f" — {g['vram_total_mb']:.0f} Mo VRAM"
+        elif "unified_memory_gb" in g:
+            vram_str = f" — {g['unified_memory_gb']} Go (unifiée)"
+        gpu_options.append(f"GPU #{idx} : {g['name']} ({g['backend'].upper()}){vram_str}")
+    gpu_options.append("🖥️ CPU uniquement (pas d'accélération GPU)")
+
+    # Valeur par défaut : le premier GPU, ou CPU si aucun
+    default_idx = min(st.session_state.selected_gpu_index, len(gpu_options) - 1)
+
+    selected_gpu_option = st.selectbox(
+        "Choisir le GPU pour le benchmark",
+        options=gpu_options,
+        index=default_idx,
+        key="gpu_selector",
+        help="Sélectionnez le GPU à utiliser pour l'inférence IA. Tous les GPUs détectés sont listés.",
+    )
+
+    # Déterminer le GPU sélectionné
+    selected_gpu_idx = gpu_options.index(selected_gpu_option)
+    st.session_state.selected_gpu_index = selected_gpu_idx
+
+    if selected_gpu_idx < len(gpus):
+        selected_gpu = gpus[selected_gpu_idx]
+        st.success(f"GPU sélectionné : **{selected_gpu['name']}** (Backend: {selected_gpu['backend'].upper()})")
+    else:
+        selected_gpu = None  # CPU mode
+        st.info("Mode CPU sélectionné — pas d'accélération GPU.")
+
+    st.markdown("---")
 
     # Configuration des benchmarks
     st.markdown("### Configuration")
@@ -630,20 +684,21 @@ def page_benchmark():
     st.markdown("---")
 
     # Résumé de la configuration
-    backend_info = detect_best_backend()
+    backend_info = detect_best_backend(selected_gpu=selected_gpu)
     st.markdown("### Résumé")
 
     n_quant_tests = sum(len(qs) for qs in quant_selections.values())
     n_axis_tests = len(temp_selections) + len(lang_selections) + len(pt_selections)
     n_tests = sum([run_classic, run_classic_mt, run_memory, run_gpu]) + len(selected_models) + n_quant_tests + n_axis_tests
 
+    gpu_label = selected_gpu["name"] if selected_gpu else "CPU"
     inference_mode_label = "llama-server" if server_mode else "llama-cpp-python"
     cols = st.columns(7)
     cols[0].metric("Backend IA", backend_info["backend"].upper())
-    cols[1].metric("Mode inférence", inference_mode_label)
-    cols[2].metric("Modèles sélectionnés", len(selected_models))
-    cols[3].metric("Tests quantification", n_quant_tests)
-    cols[4].metric("Axes d'analyse", n_axis_tests)
+    cols[1].metric("GPU choisi", gpu_label)
+    cols[2].metric("Mode inférence", inference_mode_label)
+    cols[3].metric("Modèles sélectionnés", len(selected_models))
+    cols[4].metric("Tests quantification", n_quant_tests)
     cols[5].metric("RAM disponible", f"{hw['ram']['available_gb']} Go")
     cols[6].metric("Tests total", n_tests)
 
@@ -683,7 +738,8 @@ def page_benchmark():
                 st.write("Exécution des tests CPU, GPU et mémoire...")
                 try:
                     classic_results = run_all_classic_benchmarks(
-                        progress_callback=classic_callback
+                        progress_callback=classic_callback,
+                        selected_gpu=selected_gpu,
                     )
                     st.session_state.classic_results = classic_results
                     classic_status.update(
@@ -781,6 +837,7 @@ def page_benchmark():
                             language_models=lang_selections if lang_selections else None,
                             prompt_type_models=pt_selections if pt_selections else None,
                             progress_callback=ai_callback,
+                            selected_gpu=selected_gpu,
                         )
 
                     st.session_state.ai_results = ai_results
@@ -824,8 +881,16 @@ def page_benchmark():
         st.markdown("### Sauvegarde")
 
         try:
+            # Enrichir les infos matérielles avec le GPU sélectionné
+            hw_with_selection = dict(hw)
+            if selected_gpu:
+                hw_with_selection["selected_gpu"] = {
+                    "gpu_index": selected_gpu.get("gpu_index", 0),
+                    "name": selected_gpu.get("name", "?"),
+                    "backend": selected_gpu.get("backend", "?"),
+                }
             save_path = save_results(
-                hardware_info=hw,
+                hardware_info=hw_with_selection,
                 classic_results=st.session_state.classic_results,
                 ai_results=st.session_state.ai_results,
             )
@@ -867,17 +932,31 @@ def page_benchmark():
                 read_bw = mem.get("read", {}).get("bandwidth_gb_s", 0)
                 cols[2].metric("Mémoire (lecture)", f"{read_bw} Go/s")
 
-            # GPU
+            # GPU Raw Compute
             gpu = benchmarks.get("gpu_compute", {})
             if gpu.get("status") == "completed":
                 gpu_res = gpu.get("results", {})
                 if gpu_res:
                     largest = list(gpu_res.values())[-1]
-                    cols[3].metric("GPU", f"{largest.get('gflops', 0)} GFLOPS")
+                    cols[3].metric("GPU Raw", f"{largest.get('gflops', 0)} GFLOPS")
             elif gpu.get("status") == "skipped":
-                cols[3].metric("GPU", "Ignoré ⚠️", gpu.get("reason", "")[:60])
+                cols[3].metric("GPU Raw", "Ignoré ⚠️", gpu.get("reason", "")[:60])
             else:
-                cols[3].metric("GPU", gpu.get("reason", "N/A"))
+                cols[3].metric("GPU Raw", gpu.get("reason", "N/A"))
+
+            # GPU System Score
+            gpu_sys = benchmarks.get("gpu_system", {})
+            if gpu_sys.get("status") == "completed":
+                gpu_sys_res = gpu_sys.get("results", {})
+                if gpu_sys_res:
+                    largest_sys = list(gpu_sys_res.values())[-1]
+                    cols_sys = st.columns(4)
+                    cols_sys[0].metric("GPU System", f"{largest_sys.get('gflops_pipeline', 0)} GFLOPS")
+                    cols_sys[1].metric("Transfert", f"{largest_sys.get('transfer_bandwidth_gb_s', 0)} Go/s")
+                    pct_compute = largest_sys.get('pct_compute', 0)
+                    cols_sys[2].metric("% Calcul", f"{pct_compute}%")
+                    pct_transfer = round(largest_sys.get('pct_transfer_to', 0) + largest_sys.get('pct_transfer_back', 0), 1)
+                    cols_sys[3].metric("% Transfert", f"{pct_transfer}%")
 
         if st.session_state.ai_results:
             ai_res = st.session_state.ai_results.get("results", {})
@@ -973,7 +1052,12 @@ def page_results():
         timestamp = meta.get("timestamp", "")[:16].replace("T", " ")
         ram = meta.get("ram_gb", 0)
         backend = meta.get("backend", "cpu").upper()
-        label = f"**{fname}** — {cpu} | {ram} Go RAM | {backend} | {timestamp}"
+        gpu_name = meta.get("gpu", "None")
+        gpu_count = meta.get("gpu_count", 0)
+        gpu_label = gpu_name
+        if gpu_count > 1:
+            gpu_label += f" (+{gpu_count - 1})"
+        label = f"**{fname}** — {cpu} | {gpu_label} | {ram} Go RAM | {backend} | {timestamp}"
 
         col_cb, col_del = st.columns([20, 1])
         with col_cb:
@@ -1059,15 +1143,50 @@ def _display_single_result(data: dict, filename: str):
     hw = data.get("hardware", {})
     cpu_model = hw.get("cpu", {}).get("model", "Unknown")
     gpus = hw.get("gpu", {}).get("gpus", [])
-    gpu_name = gpus[0]["name"] if gpus else "None"
     ram_total = hw.get("ram", {}).get("total_gb", 0)
     backend = hw.get("gpu", {}).get("primary_backend", "cpu")
 
-    cols = st.columns(4)
-    cols[0].metric("CPU", cpu_model)
-    cols[1].metric("GPU", gpu_name)
-    cols[2].metric("RAM", f"{ram_total} Go")
-    cols[3].metric("Backend", backend.upper())
+    # GPU sélectionné pour le benchmark (si enregistré)
+    selected_gpu_info = hw.get("selected_gpu", {})
+    selected_gpu_idx = selected_gpu_info.get("gpu_index", 0)
+    selected_gpu_name = selected_gpu_info.get("name", "")
+
+    # Afficher tous les GPUs détectés
+    if gpus:
+        n_gpus = len(gpus)
+        if n_gpus == 1:
+            gpu_label = gpus[0].get("name", "?")
+        else:
+            gpu_label = f"{n_gpus} GPUs détectés"
+
+        cols = st.columns(4)
+        cols[0].metric("CPU", cpu_model)
+        cols[1].metric("GPU", gpu_label)
+        cols[2].metric("RAM", f"{ram_total} Go")
+        cols[3].metric("Backend", backend.upper())
+
+        # Détail de chaque GPU avec indication du GPU utilisé
+        if n_gpus > 1 or selected_gpu_name:
+            for g in gpus:
+                g_idx = g.get("gpu_index", 0)
+                is_selected = (g_idx == selected_gpu_idx) if selected_gpu_info else (g_idx == 0)
+                prefix = "✅ " if is_selected else ""
+                suffix = " *(utilisé pour le benchmark)*" if is_selected else ""
+                vram_str = ""
+                if "vram_total_mb" in g:
+                    vram_str = f" — {g['vram_total_mb']:.0f} Mo VRAM"
+                elif "unified_memory_gb" in g:
+                    vram_str = f" — {g['unified_memory_gb']} Go (unifiée)"
+                st.markdown(
+                    f"- {prefix}**GPU #{g_idx}** : {g.get('name', '?')} "
+                    f"({g.get('backend', '?').upper()}){vram_str}{suffix}"
+                )
+    else:
+        cols = st.columns(4)
+        cols[0].metric("CPU", cpu_model)
+        cols[1].metric("GPU", "Aucun")
+        cols[2].metric("RAM", f"{ram_total} Go")
+        cols[3].metric("Backend", backend.upper())
 
     st.markdown("---")
 
@@ -1122,7 +1241,7 @@ def _display_single_result(data: dict, filename: str):
             )
             st.plotly_chart(fig, use_container_width=True)
 
-        # GPU
+        # GPU Raw Compute
         gpu_bench = classic.get("gpu_compute", {})
         if gpu_bench.get("status") == "completed":
             gpu_results = gpu_bench.get("results", {})
@@ -1131,17 +1250,115 @@ def _display_single_result(data: dict, filename: str):
                 gpu_chart["Taille"].append(size)
                 gpu_chart["GFLOPS"].append(vals.get("gflops", 0))
 
+            gpu_idx_label = ""
+            if gpu_bench.get("gpu_index") is not None and len(gpus) > 1:
+                gpu_idx_label = f" [GPU #{gpu_bench['gpu_index']}]"
+
             fig = px.bar(
                 gpu_chart,
                 x="Taille", y="GFLOPS",
-                title=f"Performance GPU ({gpu_bench.get('backend', '')}) - {gpu_bench.get('device', '')}",
+                title=f"🖥️ GPU Raw Compute ({gpu_bench.get('backend', '')}) - {gpu_bench.get('device', '')}{gpu_idx_label}",
                 color_discrete_sequence=["#FF6B6B"],
             )
             st.plotly_chart(fig, use_container_width=True)
         elif gpu_bench.get("status") == "skipped":
             reason = gpu_bench.get("reason", "GPU non disponible")
             advice = gpu_bench.get("advice", "")
-            warning_msg = f"**GPU Compute** — {reason}"
+            warning_msg = f"**GPU Raw Compute** — {reason}"
+            if advice:
+                warning_msg += f"\n\n💡 {advice}"
+            st.warning(warning_msg)
+
+        # GPU System Score
+        gpu_sys_bench = classic.get("gpu_system", {})
+        if gpu_sys_bench.get("status") == "completed":
+            gpu_sys_results = gpu_sys_bench.get("results", {})
+            if gpu_sys_results:
+                gpu_sys_idx_label = ""
+                if gpu_sys_bench.get("gpu_index") is not None and len(gpus) > 1:
+                    gpu_sys_idx_label = f" [GPU #{gpu_sys_bench['gpu_index']}]"
+
+                # Graphique GFLOPS pipeline vs compute pur
+                sys_chart = {
+                    "Taille": [],
+                    "GFLOPS": [],
+                    "Type": [],
+                }
+                for size, vals in gpu_sys_results.items():
+                    sys_chart["Taille"].append(size)
+                    sys_chart["GFLOPS"].append(vals.get("gflops_pipeline", 0))
+                    sys_chart["Type"].append("End-to-End (pipeline)")
+                    sys_chart["Taille"].append(size)
+                    sys_chart["GFLOPS"].append(vals.get("gflops_compute", 0))
+                    sys_chart["Type"].append("Calcul pur (matmul)")
+
+                fig_sys = px.bar(
+                    sys_chart,
+                    x="Taille", y="GFLOPS",
+                    color="Type",
+                    barmode="group",
+                    title=f"🔄 GPU System Score ({gpu_sys_bench.get('backend', '')}) - {gpu_sys_bench.get('device', '')}{gpu_sys_idx_label}",
+                    color_discrete_sequence=["#764ba2", "#FF6B6B"],
+                )
+                st.plotly_chart(fig_sys, use_container_width=True)
+
+                # Graphique répartition du temps (stacked bar)
+                time_chart = {
+                    "Taille": [],
+                    "Temps (ms)": [],
+                    "Étape": [],
+                }
+                for size, vals in gpu_sys_results.items():
+                    time_chart["Taille"].append(size)
+                    time_chart["Temps (ms)"].append(round(vals.get("transfer_to_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⬆️ CPU → GPU")
+                    time_chart["Taille"].append(size)
+                    time_chart["Temps (ms)"].append(round(vals.get("compute_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⚙️ Calcul GPU")
+                    time_chart["Taille"].append(size)
+                    time_chart["Temps (ms)"].append(round(vals.get("transfer_back_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⬇️ GPU → CPU")
+
+                fig_time = px.bar(
+                    time_chart,
+                    x="Taille", y="Temps (ms)",
+                    color="Étape",
+                    barmode="stack",
+                    title="Répartition du temps par étape",
+                    color_discrete_sequence=["#667eea", "#FF6B6B", "#f093fb"],
+                )
+                st.plotly_chart(fig_time, use_container_width=True)
+
+                # Tableau détaillé
+                import pandas as pd
+                sys_table = {
+                    "Taille": [],
+                    "Pipeline (ms)": [],
+                    "CPU→GPU (ms)": [],
+                    "Calcul (ms)": [],
+                    "GPU→CPU (ms)": [],
+                    "GFLOPS pipeline": [],
+                    "Transfert (Go/s)": [],
+                    "% Calcul": [],
+                    "% Transfert": [],
+                }
+                for size, vals in gpu_sys_results.items():
+                    sys_table["Taille"].append(size)
+                    sys_table["Pipeline (ms)"].append(round(vals.get("pipeline_median_s", 0) * 1000, 2))
+                    sys_table["CPU→GPU (ms)"].append(round(vals.get("transfer_to_median_s", 0) * 1000, 2))
+                    sys_table["Calcul (ms)"].append(round(vals.get("compute_median_s", 0) * 1000, 2))
+                    sys_table["GPU→CPU (ms)"].append(round(vals.get("transfer_back_median_s", 0) * 1000, 2))
+                    sys_table["GFLOPS pipeline"].append(vals.get("gflops_pipeline", 0))
+                    sys_table["Transfert (Go/s)"].append(vals.get("transfer_bandwidth_gb_s", 0))
+                    sys_table["% Calcul"].append(f"{vals.get('pct_compute', 0)}%")
+                    pct_t = round(vals.get('pct_transfer_to', 0) + vals.get('pct_transfer_back', 0), 1)
+                    sys_table["% Transfert"].append(f"{pct_t}%")
+                st.dataframe(pd.DataFrame(sys_table), use_container_width=True, hide_index=True)
+
+        elif gpu_sys_bench.get("status") == "skipped":
+            reason = gpu_sys_bench.get("reason", "GPU non disponible")
+            advice = gpu_sys_bench.get("advice", "")
+            warning_msg = f"**GPU System Score** — {reason}"
             if advice:
                 warning_msg += f"\n\n💡 {advice}"
             st.warning(warning_msg)
@@ -1642,13 +1859,25 @@ def _display_comparison(loaded_data: dict):
 
     # ─── Tableau comparatif matériel ───
     st.markdown("#### Comparaison matérielle")
-    hw_table = {"Résultat": [], "CPU": [], "GPU": [], "RAM (Go)": [], "Backend": []}
+    hw_table = {"Résultat": [], "CPU": [], "GPU(s)": [], "GPU benchmark": [], "RAM (Go)": [], "Backend": []}
     for fname, data in loaded_data.items():
         hw = data.get("hardware", {})
         hw_table["Résultat"].append(result_labels[fname])
         hw_table["CPU"].append(hw.get("cpu", {}).get("model", "?"))
         gpus = hw.get("gpu", {}).get("gpus", [])
-        hw_table["GPU"].append(gpus[0]["name"] if gpus else "None")
+        if gpus:
+            gpu_names = ", ".join(g.get("name", "?") for g in gpus)
+        else:
+            gpu_names = "Aucun"
+        hw_table["GPU(s)"].append(gpu_names)
+        # GPU utilisé pour le benchmark
+        sel_gpu = hw.get("selected_gpu", {})
+        if sel_gpu:
+            hw_table["GPU benchmark"].append(f"#{sel_gpu.get('gpu_index', 0)} {sel_gpu.get('name', '?')}")
+        elif gpus:
+            hw_table["GPU benchmark"].append(gpus[0].get("name", "?"))
+        else:
+            hw_table["GPU benchmark"].append("CPU")
         hw_table["RAM (Go)"].append(hw.get("ram", {}).get("total_gb", 0))
         hw_table["Backend"].append(
             hw.get("gpu", {}).get("primary_backend", "cpu").upper()
@@ -1719,7 +1948,7 @@ def _display_comparison(loaded_data: dict):
         st.plotly_chart(fig_mem, use_container_width=True)
 
     # ══════════════════════════════════════════════
-    # Comparaison GPU
+    # Comparaison GPU Raw Compute
     # ══════════════════════════════════════════════
     has_gpu = False
     fig_gpu = go.Figure()
@@ -1733,8 +1962,15 @@ def _display_comparison(loaded_data: dict):
                 has_gpu = True
                 sizes = list(gpu_results.keys())
                 gflops_vals = [gpu_results[s].get("gflops", 0) for s in sizes]
+                gpu_device = gpu_bench.get("device", "")
+                gpu_idx_str = ""
+                if gpu_bench.get("gpu_index") is not None:
+                    gpu_idx_str = f" [GPU #{gpu_bench['gpu_index']}]"
+                trace_name = f"{result_labels[fname]}"
+                if gpu_device:
+                    trace_name += f" ({gpu_device}{gpu_idx_str})"
                 fig_gpu.add_trace(go.Bar(
-                    name=result_labels[fname],
+                    name=trace_name,
                     x=sizes,
                     y=gflops_vals,
                     marker_color=result_colors[fname],
@@ -1742,14 +1978,104 @@ def _display_comparison(loaded_data: dict):
                     textposition="outside",
                 ))
     if has_gpu:
-        st.markdown("#### Comparaison GPU")
+        st.markdown("#### 🖥️ Comparaison GPU Raw Compute")
         fig_gpu.update_layout(
             barmode="group",
-            title="Performance GPU (GFLOPS)",
+            title="GPU Raw Compute — GFLOPS (matmul pur, sync only)",
             yaxis_title="GFLOPS",
             legend_title="Résultat",
         )
         st.plotly_chart(fig_gpu, use_container_width=True)
+
+    # ══════════════════════════════════════════════
+    # Comparaison GPU System Score
+    # ══════════════════════════════════════════════
+    has_gpu_sys = False
+    fig_gpu_sys = go.Figure()
+    fig_gpu_transfer = go.Figure()
+    for fname, data in loaded_data.items():
+        gpu_sys_bench = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+            "gpu_system", {}
+        )
+        if gpu_sys_bench.get("status") == "completed":
+            gpu_sys_results = gpu_sys_bench.get("results", {})
+            if gpu_sys_results:
+                has_gpu_sys = True
+                sizes = list(gpu_sys_results.keys())
+
+                pipeline_gflops = [gpu_sys_results[s].get("gflops_pipeline", 0) for s in sizes]
+                gpu_device = gpu_sys_bench.get("device", "")
+                gpu_idx_str = ""
+                if gpu_sys_bench.get("gpu_index") is not None:
+                    gpu_idx_str = f" [GPU #{gpu_sys_bench['gpu_index']}]"
+                trace_name = f"{result_labels[fname]}"
+                if gpu_device:
+                    trace_name += f" ({gpu_device}{gpu_idx_str})"
+
+                fig_gpu_sys.add_trace(go.Bar(
+                    name=trace_name,
+                    x=sizes,
+                    y=pipeline_gflops,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.0f}" for v in pipeline_gflops],
+                    textposition="outside",
+                ))
+
+                # Bande passante transfert
+                transfer_bw = [gpu_sys_results[s].get("transfer_bandwidth_gb_s", 0) for s in sizes]
+                fig_gpu_transfer.add_trace(go.Bar(
+                    name=trace_name,
+                    x=sizes,
+                    y=transfer_bw,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" for v in transfer_bw],
+                    textposition="outside",
+                ))
+
+    if has_gpu_sys:
+        st.markdown("#### 🔄 Comparaison GPU System Score")
+        fig_gpu_sys.update_layout(
+            barmode="group",
+            title="GPU System Score — GFLOPS (pipeline end-to-end : CPU→GPU→calcul→CPU)",
+            yaxis_title="GFLOPS",
+            legend_title="Résultat",
+        )
+        st.plotly_chart(fig_gpu_sys, use_container_width=True)
+
+        fig_gpu_transfer.update_layout(
+            barmode="group",
+            title="Bande passante transfert CPU↔GPU (Go/s)",
+            yaxis_title="Go/s",
+            legend_title="Résultat",
+        )
+        st.plotly_chart(fig_gpu_transfer, use_container_width=True)
+
+        # Tableau comparatif répartition du temps (plus grande matrice)
+        sys_table = {"Résultat": [], "GPU": [], "Pipeline (ms)": [], "CPU→GPU (ms)": [],
+                     "Calcul (ms)": [], "GPU→CPU (ms)": [], "% Calcul": [], "% Transfert": [],
+                     "GFLOPS pipeline": [], "Transfert (Go/s)": []}
+        for fname, data in loaded_data.items():
+            gpu_sys_bench = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+                "gpu_system", {}
+            )
+            if gpu_sys_bench.get("status") == "completed":
+                gpu_sys_results = gpu_sys_bench.get("results", {})
+                if gpu_sys_results:
+                    largest = list(gpu_sys_results.values())[-1]
+                    sys_table["Résultat"].append(result_labels[fname])
+                    sys_table["GPU"].append(gpu_sys_bench.get("device", "?"))
+                    sys_table["Pipeline (ms)"].append(round(largest.get("pipeline_median_s", 0) * 1000, 2))
+                    sys_table["CPU→GPU (ms)"].append(round(largest.get("transfer_to_median_s", 0) * 1000, 2))
+                    sys_table["Calcul (ms)"].append(round(largest.get("compute_median_s", 0) * 1000, 2))
+                    sys_table["GPU→CPU (ms)"].append(round(largest.get("transfer_back_median_s", 0) * 1000, 2))
+                    sys_table["% Calcul"].append(f"{largest.get('pct_compute', 0)}%")
+                    pct_t = round(largest.get('pct_transfer_to', 0) + largest.get('pct_transfer_back', 0), 1)
+                    sys_table["% Transfert"].append(f"{pct_t}%")
+                    sys_table["GFLOPS pipeline"].append(largest.get("gflops_pipeline", 0))
+                    sys_table["Transfert (Go/s)"].append(largest.get("transfer_bandwidth_gb_s", 0))
+        if sys_table["Résultat"]:
+            st.markdown("**Détail pour la plus grande matrice (4096×4096) :**")
+            st.dataframe(pd.DataFrame(sys_table), use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════
     # Comparaison Inférence IA
@@ -1994,6 +2320,364 @@ def _display_comparison(loaded_data: dict):
             if qt_table["Résultat"]:
                 st.dataframe(
                     pd.DataFrame(qt_table), use_container_width=True, hide_index=True
+                )
+
+    # ══════════════════════════════════════════════
+    # Comparaison Température inter-machines
+    # ══════════════════════════════════════════════
+    all_temp_models = {}
+    for fname, data in loaded_data.items():
+        temp_comp = data.get("ai_benchmarks", {}).get("temperature_comparison", {})
+        for model_key, comp_data in temp_comp.items():
+            if comp_data.get("comparison_table"):
+                if model_key not in all_temp_models:
+                    all_temp_models[model_key] = comp_data.get("model_name", model_key)
+
+    if all_temp_models:
+        st.markdown("#### 🌡️ Comparaison Température")
+
+        for model_key, model_name in all_temp_models.items():
+            st.markdown(f"##### {model_name}")
+
+            # Collecter toutes les variantes de température testées
+            all_temps = []
+            all_temp_labels = {}
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "temperature_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    tk = row.get("temperature_key", row.get("label", ""))
+                    if tk and tk not in all_temp_labels:
+                        all_temps.append(tk)
+                        all_temp_labels[tk] = row.get("label", tk)
+
+            if not all_temps:
+                continue
+
+            # Graphiques tokens/s et latence inter-token
+            fig_t_tps = go.Figure()
+            fig_t_itl = go.Figure()
+
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "temperature_comparison", {}
+                ).get(model_key, {})
+                table = comp.get("comparison_table", [])
+                lookup = {
+                    row.get("temperature_key", row.get("label", "")): row
+                    for row in table
+                }
+
+                x_labels = [all_temp_labels.get(tk, tk) for tk in all_temps]
+                tps_vals = [lookup.get(tk, {}).get("tokens_per_second", 0) for tk in all_temps]
+                itl_vals = [lookup.get(tk, {}).get("inter_token_latency_ms", 0) for tk in all_temps]
+
+                fig_t_tps.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=tps_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in tps_vals],
+                    textposition="outside",
+                ))
+                fig_t_itl.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=itl_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in itl_vals],
+                    textposition="outside",
+                ))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_t_tps.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Tokens/s par température",
+                    yaxis_title="Tokens/s",
+                    xaxis_title="Température",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_t_tps, use_container_width=True)
+            with col2:
+                fig_t_itl.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Latence inter-token par température",
+                    yaxis_title="ms",
+                    xaxis_title="Température",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_t_itl, use_container_width=True)
+
+            # Tableau comparatif température multi-machine
+            temp_table = {
+                "Résultat": [], "Température": [], "Tokens/s": [],
+                "1er token (s)": [], "Latence inter-token (ms)": [],
+                "Mémoire pic (Go)": [], "Stabilité": [],
+            }
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "temperature_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    temp_table["Résultat"].append(result_labels[fname])
+                    temp_table["Température"].append(
+                        row.get("label", row.get("temperature_key", "?"))
+                    )
+                    temp_table["Tokens/s"].append(row.get("tokens_per_second", 0))
+                    temp_table["1er token (s)"].append(
+                        row.get("first_token_latency_s", 0)
+                    )
+                    temp_table["Latence inter-token (ms)"].append(
+                        row.get("inter_token_latency_ms", 0)
+                    )
+                    temp_table["Mémoire pic (Go)"].append(
+                        row.get("peak_memory_gb", 0)
+                    )
+                    temp_table["Stabilité"].append(row.get("stability", "?"))
+
+            if temp_table["Résultat"]:
+                st.dataframe(
+                    pd.DataFrame(temp_table), use_container_width=True, hide_index=True
+                )
+
+    # ══════════════════════════════════════════════
+    # Comparaison Langue inter-machines
+    # ══════════════════════════════════════════════
+    all_lang_models = {}
+    for fname, data in loaded_data.items():
+        lang_comp = data.get("ai_benchmarks", {}).get("language_comparison", {})
+        for model_key, comp_data in lang_comp.items():
+            if comp_data.get("comparison_table"):
+                if model_key not in all_lang_models:
+                    all_lang_models[model_key] = comp_data.get("model_name", model_key)
+
+    if all_lang_models:
+        st.markdown("#### 🌍 Comparaison Langue")
+
+        for model_key, model_name in all_lang_models.items():
+            st.markdown(f"##### {model_name}")
+
+            # Collecter toutes les langues testées
+            all_langs = []
+            all_lang_labels = {}
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "language_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    lk = row.get("language_key", row.get("label", ""))
+                    if lk and lk not in all_lang_labels:
+                        all_langs.append(lk)
+                        flag = row.get("flag", "")
+                        label = row.get("label", lk)
+                        all_lang_labels[lk] = f"{flag} {label}".strip()
+
+            if not all_langs:
+                continue
+
+            # Graphiques tokens/s et latence inter-token
+            fig_l_tps = go.Figure()
+            fig_l_itl = go.Figure()
+
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "language_comparison", {}
+                ).get(model_key, {})
+                table = comp.get("comparison_table", [])
+                lookup = {
+                    row.get("language_key", row.get("label", "")): row
+                    for row in table
+                }
+
+                x_labels = [all_lang_labels.get(lk, lk) for lk in all_langs]
+                tps_vals = [lookup.get(lk, {}).get("tokens_per_second", 0) for lk in all_langs]
+                itl_vals = [lookup.get(lk, {}).get("inter_token_latency_ms", 0) for lk in all_langs]
+
+                fig_l_tps.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=tps_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in tps_vals],
+                    textposition="outside",
+                ))
+                fig_l_itl.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=itl_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in itl_vals],
+                    textposition="outside",
+                ))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_l_tps.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Tokens/s par langue",
+                    yaxis_title="Tokens/s",
+                    xaxis_title="Langue",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_l_tps, use_container_width=True)
+            with col2:
+                fig_l_itl.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Latence inter-token par langue",
+                    yaxis_title="ms",
+                    xaxis_title="Langue",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_l_itl, use_container_width=True)
+
+            # Tableau comparatif langue multi-machine
+            lang_table = {
+                "Résultat": [], "Langue": [], "Tokens/s": [],
+                "1er token (s)": [], "Latence inter-token (ms)": [],
+                "Mémoire pic (Go)": [], "Stabilité": [],
+            }
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "language_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    lang_table["Résultat"].append(result_labels[fname])
+                    flag = row.get("flag", "")
+                    label = row.get("label", row.get("language_key", "?"))
+                    lang_table["Langue"].append(f"{flag} {label}".strip())
+                    lang_table["Tokens/s"].append(row.get("tokens_per_second", 0))
+                    lang_table["1er token (s)"].append(
+                        row.get("first_token_latency_s", 0)
+                    )
+                    lang_table["Latence inter-token (ms)"].append(
+                        row.get("inter_token_latency_ms", 0)
+                    )
+                    lang_table["Mémoire pic (Go)"].append(
+                        row.get("peak_memory_gb", 0)
+                    )
+                    lang_table["Stabilité"].append(row.get("stability", "?"))
+
+            if lang_table["Résultat"]:
+                st.dataframe(
+                    pd.DataFrame(lang_table), use_container_width=True, hide_index=True
+                )
+
+    # ══════════════════════════════════════════════
+    # Comparaison Type de Prompt inter-machines
+    # ══════════════════════════════════════════════
+    all_pt_models = {}
+    for fname, data in loaded_data.items():
+        pt_comp = data.get("ai_benchmarks", {}).get("prompt_type_comparison", {})
+        for model_key, comp_data in pt_comp.items():
+            if comp_data.get("comparison_table"):
+                if model_key not in all_pt_models:
+                    all_pt_models[model_key] = comp_data.get("model_name", model_key)
+
+    if all_pt_models:
+        st.markdown("#### 📝 Comparaison Type de Prompt")
+
+        for model_key, model_name in all_pt_models.items():
+            st.markdown(f"##### {model_name}")
+
+            # Collecter tous les types de prompt testés
+            all_pts = []
+            all_pt_labels = {}
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "prompt_type_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    ptk = row.get("prompt_type_key", row.get("label", ""))
+                    if ptk and ptk not in all_pt_labels:
+                        all_pts.append(ptk)
+                        icon = row.get("icon", "")
+                        label = row.get("label", ptk)
+                        all_pt_labels[ptk] = f"{icon} {label}".strip()
+
+            if not all_pts:
+                continue
+
+            # Graphiques tokens/s et latence inter-token
+            fig_p_tps = go.Figure()
+            fig_p_itl = go.Figure()
+
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "prompt_type_comparison", {}
+                ).get(model_key, {})
+                table = comp.get("comparison_table", [])
+                lookup = {
+                    row.get("prompt_type_key", row.get("label", "")): row
+                    for row in table
+                }
+
+                x_labels = [all_pt_labels.get(ptk, ptk) for ptk in all_pts]
+                tps_vals = [lookup.get(ptk, {}).get("tokens_per_second", 0) for ptk in all_pts]
+                itl_vals = [lookup.get(ptk, {}).get("inter_token_latency_ms", 0) for ptk in all_pts]
+
+                fig_p_tps.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=tps_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in tps_vals],
+                    textposition="outside",
+                ))
+                fig_p_itl.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=x_labels, y=itl_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in itl_vals],
+                    textposition="outside",
+                ))
+
+            col1, col2 = st.columns(2)
+            with col1:
+                fig_p_tps.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Tokens/s par type de prompt",
+                    yaxis_title="Tokens/s",
+                    xaxis_title="Type de prompt",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_p_tps, use_container_width=True)
+            with col2:
+                fig_p_itl.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Latence inter-token par type de prompt",
+                    yaxis_title="ms",
+                    xaxis_title="Type de prompt",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_p_itl, use_container_width=True)
+
+            # Tableau comparatif type de prompt multi-machine
+            pt_table = {
+                "Résultat": [], "Type": [], "Tokens/s": [],
+                "1er token (s)": [], "Latence inter-token (ms)": [],
+                "Mémoire pic (Go)": [], "Stabilité": [],
+            }
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "prompt_type_comparison", {}
+                ).get(model_key, {})
+                for row in comp.get("comparison_table", []):
+                    pt_table["Résultat"].append(result_labels[fname])
+                    icon = row.get("icon", "")
+                    label = row.get("label", row.get("prompt_type_key", "?"))
+                    pt_table["Type"].append(f"{icon} {label}".strip())
+                    pt_table["Tokens/s"].append(row.get("tokens_per_second", 0))
+                    pt_table["1er token (s)"].append(
+                        row.get("first_token_latency_s", 0)
+                    )
+                    pt_table["Latence inter-token (ms)"].append(
+                        row.get("inter_token_latency_ms", 0)
+                    )
+                    pt_table["Mémoire pic (Go)"].append(
+                        row.get("peak_memory_gb", 0)
+                    )
+                    pt_table["Stabilité"].append(row.get("stability", "?"))
+
+            if pt_table["Résultat"]:
+                st.dataframe(
+                    pd.DataFrame(pt_table), use_container_width=True, hide_index=True
                 )
 
 

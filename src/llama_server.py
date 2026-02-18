@@ -265,9 +265,10 @@ class LlamaServerManager:
             # DLL manquante, exécutable invalide, etc.
             raise RuntimeError(
                 f"Impossible de lancer llama-server : {e}\n"
-                "Sur Windows avec SYCL, vérifiez que les DLLs oneAPI sont accessibles :\n"
-                "  - Exécutez d'abord : \"C:\\Program Files (x86)\\Intel\\oneAPI\\setvars.bat\"\n"
-                "  - Ou ajoutez le dossier des DLLs SYCL au PATH système."
+                "Vérifiez les dépendances selon votre backend GPU :\n"
+                "  Windows SYCL (Intel) : exécutez \"C:\\Program Files (x86)\\Intel\\oneAPI\\setvars.bat\"\n"
+                "  Linux ROCm (AMD)     : vérifiez que ROCm est installé (rocm-smi)\n"
+                "  Windows/Linux CUDA   : vérifiez que les drivers NVIDIA sont à jour"
             )
         except Exception as e:
             raise RuntimeError(f"Erreur lancement llama-server : {e}")
@@ -339,9 +340,9 @@ class LlamaServerManager:
             f"llama-server n'a pas répondu en {timeout}s.\n"
             "Causes possibles :\n"
             "  - Le modèle est trop gros pour la mémoire disponible\n"
-            "  - La compilation SYCL prend plus de temps (1ère fois)\n"
+            "  - La compilation GPU prend plus de temps (1ère fois avec SYCL/ROCm)\n"
             "  - Le port {port} est déjà utilisé par un autre processus\n"
-            "  - Il manque des DLLs (oneAPI/SYCL)\n"
+            "  - Il manque des dépendances GPU (oneAPI/SYCL, ROCm/HIP, CUDA)\n"
             f"\nSortie serveur (dernières lignes) :\n{stderr_text if stderr_text else '(aucune sortie — le binaire ne produit peut-être pas de logs)'}"
         )
 
