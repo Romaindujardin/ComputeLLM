@@ -414,7 +414,7 @@ INFERENCE_CONFIG = {
     "repeat_penalty": 1.1,      # Pénalité de répétition
     "n_ctx": 2048,              # Taille du contexte
     "seed": 42,                 # Graine pour reproductibilité
-    "n_warmup_runs": 1,         # Nombre de runs d'échauffement
+    "n_warmup_runs": 2,         # Nombre de runs d'échauffement
     "n_benchmark_runs": 3,      # Nombre de runs de benchmark
 }
 
