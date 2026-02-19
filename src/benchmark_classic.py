@@ -721,16 +721,30 @@ def _detect_gpu_device(
     device_name = ""
     backend = ""
     dev_idx = selected_gpu.get("device_index", 0) if selected_gpu else 0
+    selected_backend = selected_gpu.get("backend", "") if selected_gpu else ""
 
     if torch.cuda.is_available():
-        if dev_idx >= torch.cuda.device_count():
-            dev_idx = 0
-        device = torch.device(f"cuda:{dev_idx}")
-        device_name = torch.cuda.get_device_name(dev_idx)
-        if hasattr(torch.version, "hip") and torch.version.hip:
-            backend = f"ROCm/HIP {torch.version.hip}"
+        is_rocm = hasattr(torch.version, "hip") and torch.version.hip
+
+        # Si l'utilisateur a sélectionné un GPU NVIDIA (cuda) mais que PyTorch
+        # est compilé avec ROCm (HIP), CUDA expose en réalité le GPU AMD.
+        # On ne doit PAS utiliser ce device pour le benchmark NVIDIA.
+        if selected_backend == "cuda" and is_rocm:
+            # Ne pas utiliser le device ROCm/HIP pour un benchmark NVIDIA
+            device = None
+        # Si l'utilisateur a sélectionné un GPU AMD (rocm) mais que PyTorch
+        # est compilé avec CUDA (NVIDIA), le device n'est pas le bon non plus.
+        elif selected_backend == "rocm" and not is_rocm:
+            device = None
         else:
-            backend = "CUDA"
+            if dev_idx >= torch.cuda.device_count():
+                dev_idx = 0
+            device = torch.device(f"cuda:{dev_idx}")
+            device_name = torch.cuda.get_device_name(dev_idx)
+            if is_rocm:
+                backend = f"ROCm/HIP {torch.version.hip}"
+            else:
+                backend = "CUDA"
     else:
         try:
             if hasattr(torch, "xpu") and torch.xpu.is_available():
@@ -782,52 +796,118 @@ def _detect_gpu_device(
     if device is None:
         reason = "Aucun GPU compatible (CUDA/ROCm/XPU/DirectML/MPS) détecté"
         advice = ""
+        torch_version = getattr(torch, "__version__", "")
+        is_windows = platform.system() == "Windows"
 
-        try:
-            from src.hardware_detect import _detect_amd_gpu
-            amd_gpus = _detect_amd_gpu()
-            if amd_gpus:
-                gpu_name = amd_gpus[0].get("name", "AMD GPU")
-                torch_version = getattr(torch, "__version__", "")
-                is_windows = platform.system() == "Windows"
-                if "+cu" in torch_version or "cuda" in torch_version.lower():
-                    reason = (
-                        f"GPU AMD ({gpu_name}) détecté, mais votre PyTorch "
-                        f"({torch_version}) est compilé pour CUDA (NVIDIA)."
-                    )
-                    if is_windows:
-                        advice = (
-                            "Sur Windows, installez torch-directml pour "
-                            "benchmarker votre GPU AMD :\n"
-                            "pip install torch-directml"
+        # ── Priorité : adapter le message au GPU SÉLECTIONNÉ par l'utilisateur ──
+        # Si l'utilisateur a explicitement choisi un GPU (ex. NVIDIA), le message
+        # d'erreur doit concerner ce GPU-là, pas un autre GPU détecté sur le système.
+        selected_backend = selected_gpu.get("backend", "") if selected_gpu else ""
+        selected_name = selected_gpu.get("name", "GPU") if selected_gpu else ""
+
+        if selected_backend == "cuda":
+            # L'utilisateur a sélectionné un GPU NVIDIA mais CUDA n'est pas dispo
+            reason = (
+                f"GPU NVIDIA sélectionné ({selected_name}), mais PyTorch n'a pas "
+                f"le support CUDA activé (version installée : {torch_version})."
+            )
+            advice = (
+                "Installez PyTorch avec le support CUDA pour utiliser votre GPU NVIDIA :\n"
+                "pip install torch torchvision torchaudio "
+                "--index-url https://download.pytorch.org/whl/cu124"
+            )
+        elif selected_backend == "rocm":
+            # L'utilisateur a sélectionné un GPU AMD (ROCm)
+            reason = (
+                f"GPU AMD sélectionné ({selected_name}), mais PyTorch n'a pas "
+                f"le support ROCm/HIP activé (version installée : {torch_version})."
+            )
+            if is_windows:
+                advice = (
+                    "ROCm n'est pas disponible sur Windows. "
+                    "Installez torch-directml pour activer le support GPU AMD :\n"
+                    "pip install torch-directml"
+                )
+            else:
+                advice = (
+                    "Installez PyTorch avec le support ROCm pour utiliser votre GPU AMD :\n"
+                    "pip install torch torchvision torchaudio "
+                    "--index-url https://download.pytorch.org/whl/rocm6.2"
+                )
+        elif selected_backend == "directml":
+            reason = (
+                f"GPU sélectionné ({selected_name}) utilise DirectML, mais "
+                f"torch-directml n'est pas installé."
+            )
+            advice = (
+                "Installez torch-directml pour activer le support GPU via DirectML :\n"
+                "pip install torch-directml"
+            )
+        elif selected_backend == "sycl":
+            reason = (
+                f"GPU Intel sélectionné ({selected_name}), mais PyTorch n'a pas "
+                f"le support XPU/SYCL activé (version installée : {torch_version})."
+            )
+            advice = (
+                "Installez intel-extension-for-pytorch pour activer "
+                "le support GPU Intel :\n"
+                "pip install intel-extension-for-pytorch"
+            )
+        elif selected_backend == "metal":
+            reason = (
+                f"GPU sélectionné ({selected_name}) utilise Metal/MPS, mais "
+                f"MPS n'est pas disponible dans votre installation PyTorch."
+            )
+            advice = (
+                "Mettez à jour PyTorch pour activer le support Metal/MPS :\n"
+                "pip install --upgrade torch"
+            )
+
+        # ── Fallback : auto-détection si aucun GPU n'a été sélectionné ──
+        if not advice:
+            try:
+                from src.hardware_detect import _detect_amd_gpu
+                amd_gpus = _detect_amd_gpu()
+                if amd_gpus:
+                    gpu_name = amd_gpus[0].get("name", "AMD GPU")
+                    if "+cu" in torch_version or "cuda" in torch_version.lower():
+                        reason = (
+                            f"GPU AMD ({gpu_name}) détecté, mais votre PyTorch "
+                            f"({torch_version}) est compilé pour CUDA (NVIDIA)."
                         )
+                        if is_windows:
+                            advice = (
+                                "Sur Windows, installez torch-directml pour "
+                                "benchmarker votre GPU AMD :\n"
+                                "pip install torch-directml"
+                            )
+                        else:
+                            advice = (
+                                "Pour benchmarker votre GPU AMD, installez PyTorch "
+                                "avec le support ROCm :\n"
+                                "pip install torch torchvision torchaudio "
+                                "--index-url https://download.pytorch.org/whl/rocm6.2"
+                            )
                     else:
-                        advice = (
-                            "Pour benchmarker votre GPU AMD, installez PyTorch "
-                            "avec le support ROCm :\n"
-                            "pip install torch torchvision torchaudio "
-                            "--index-url https://download.pytorch.org/whl/rocm6.2"
+                        reason = (
+                            f"GPU AMD ({gpu_name}) détecté, mais PyTorch n'a pas "
+                            f"le support ROCm activé."
                         )
-                else:
-                    reason = (
-                        f"GPU AMD ({gpu_name}) détecté, mais PyTorch n'a pas "
-                        f"le support ROCm activé."
-                    )
-                    if is_windows:
-                        advice = (
-                            "ROCm n'est pas disponible sur Windows. "
-                            "Installez torch-directml pour activer le support GPU AMD :\n"
-                            "pip install torch-directml"
-                        )
-                    else:
-                        advice = (
-                            "Installez PyTorch avec le support ROCm pour activer "
-                            "le support GPU AMD :\n"
-                            "pip install torch torchvision torchaudio "
-                            "--index-url https://download.pytorch.org/whl/rocm6.2"
-                        )
-        except Exception:
-            pass
+                        if is_windows:
+                            advice = (
+                                "ROCm n'est pas disponible sur Windows. "
+                                "Installez torch-directml pour activer le support GPU AMD :\n"
+                                "pip install torch-directml"
+                            )
+                        else:
+                            advice = (
+                                "Installez PyTorch avec le support ROCm pour activer "
+                                "le support GPU AMD :\n"
+                                "pip install torch torchvision torchaudio "
+                                "--index-url https://download.pytorch.org/whl/rocm6.2"
+                            )
+            except Exception:
+                pass
 
         if not advice:
             try:
@@ -835,7 +915,6 @@ def _detect_gpu_device(
                 intel_gpus = _detect_intel_gpu()
                 if intel_gpus:
                     gpu_name = intel_gpus[0].get("name", "Intel GPU")
-                    torch_version = getattr(torch, "__version__", "")
                     if "+cu" in torch_version or "cuda" in torch_version.lower():
                         reason = (
                             f"GPU Intel ({gpu_name}) détecté, mais votre PyTorch "
@@ -856,6 +935,26 @@ def _detect_gpu_device(
                             "le support GPU Intel :\n"
                             "pip install intel-extension-for-pytorch"
                         )
+            except Exception:
+                pass
+
+        # ── Dernier fallback : si on a trouvé un NVIDIA via nvidia-smi
+        # mais torch.cuda.is_available() est False ──
+        if not advice:
+            try:
+                from src.hardware_detect import _detect_nvidia_gpu
+                nvidia_gpus = _detect_nvidia_gpu()
+                if nvidia_gpus:
+                    gpu_name = nvidia_gpus[0].get("name", "NVIDIA GPU")
+                    reason = (
+                        f"GPU NVIDIA ({gpu_name}) détecté, mais PyTorch n'a pas "
+                        f"le support CUDA activé (version installée : {torch_version})."
+                    )
+                    advice = (
+                        "Installez PyTorch avec le support CUDA pour utiliser votre GPU NVIDIA :\n"
+                        "pip install torch torchvision torchaudio "
+                        "--index-url https://download.pytorch.org/whl/cu124"
+                    )
             except Exception:
                 pass
 
