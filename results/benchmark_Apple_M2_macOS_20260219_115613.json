@@ -1,0 +1,2178 @@
+{
+  "id": "20260219_115613",
+  "timestamp": "2026-02-19T11:56:13.889243",
+  "version": "1.0.0",
+  "hardware": {
+    "os": {
+      "system": "Darwin",
+      "release": "25.3.0",
+      "version": "Darwin Kernel Version 25.3.0: Wed Jan 28 20:54:22 PST 2026; root:xnu-12377.81.4~5/RELEASE_ARM64_T8112",
+      "machine": "arm64",
+      "architecture": "64bit",
+      "platform": "macOS-26.3-arm64-arm-64bit",
+      "python_version": "3.11.11"
+    },
+    "cpu": {
+      "physical_cores": 8,
+      "logical_cores": 8,
+      "architecture": "arm64",
+      "model": "Apple M2",
+      "is_apple_silicon": true,
+      "architecture_type": "ARM (Apple Silicon)",
+      "performance_cores": 4,
+      "efficiency_cores": 4,
+      "frequency_mhz": {
+        "current": 3504,
+        "min": 600,
+        "max": 3504
+      }
+    },
+    "gpu": {
+      "gpus": [
+        {
+          "type": "Apple",
+          "name": "Apple M2",
+          "backend": "metal",
+          "metal_support": "",
+          "unified_memory": true,
+          "unified_memory_gb": 16.0,
+          "gpu_index": 0
+        }
+      ],
+      "backends": [
+        "metal",
+        "cpu"
+      ],
+      "primary_backend": "metal",
+      "python_backends": {
+        "pytorch": true,
+        "pytorch_version": "2.10.0",
+        "pytorch_cuda": false,
+        "pytorch_mps": true,
+        "pytorch_xpu": false,
+        "llama_cpp": true,
+        "llama_cpp_version": "0.3.16",
+        "llama_server": false,
+        "pytorch_rocm": false,
+        "ipex": false,
+        "directml": false
+      }
+    },
+    "ram": {
+      "total_gb": 16.0,
+      "available_gb": 4.81,
+      "used_gb": 5.23,
+      "percent_used": 70.0,
+      "swap_total_gb": 0.0,
+      "swap_used_gb": 0.0,
+      "unified_memory": true,
+      "note": "Apple Silicon utilise une mémoire unifiée partagée entre CPU et GPU.",
+      "hw_memsize_bytes": 17179869184
+    },
+    "selected_gpu": {
+      "gpu_index": 0,
+      "name": "Apple M2",
+      "backend": "metal"
+    }
+  },
+  "classic_benchmarks": {
+    "type": "classic_benchmarks",
+    "total_time_s": 18.82,
+    "benchmarks": {
+      "cpu_single_thread": {
+        "test": "CPU Single-Thread",
+        "method": "Matrix multiplication (NumPy, 1 thread, subprocess isolé)",
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.0002,
+              0.0003,
+              0.0002
+            ],
+            "mean_s": 0.0002,
+            "median_s": 0.0002,
+            "std_s": 0.0,
+            "gflops": 1184.28
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0021,
+              0.0021,
+              0.0021
+            ],
+            "mean_s": 0.0021,
+            "median_s": 0.0021,
+            "std_s": 0.0,
+            "gflops": 1032.03
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0156,
+              0.0161,
+              0.0154
+            ],
+            "mean_s": 0.0157,
+            "median_s": 0.0156,
+            "std_s": 0.0003,
+            "gflops": 1102.67
+          }
+        }
+      },
+      "cpu_multi_thread": {
+        "test": "CPU Multi-Thread",
+        "method": "Matrix multiplication (NumPy, 8 threads, subprocess isolé)",
+        "n_threads": 8,
+        "results": {
+          "512x512": {
+            "times_s": [
+              0.0002,
+              0.0002,
+              0.0002
+            ],
+            "mean_s": 0.0002,
+            "median_s": 0.0002,
+            "std_s": 0.0,
+            "gflops": 1200.61
+          },
+          "1024x1024": {
+            "times_s": [
+              0.0021,
+              0.0021,
+              0.0021
+            ],
+            "mean_s": 0.0021,
+            "median_s": 0.0021,
+            "std_s": 0.0,
+            "gflops": 1015.7
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0152,
+              0.0148,
+              0.0148
+            ],
+            "mean_s": 0.0149,
+            "median_s": 0.0148,
+            "std_s": 0.0002,
+            "gflops": 1159.69
+          }
+        }
+      },
+      "memory_bandwidth": {
+        "test": "Memory Bandwidth",
+        "method": "NumPy array operations (256 Mo)",
+        "data_size_gb": 0.25,
+        "results": {
+          "write": {
+            "mean_s": 0.0234,
+            "median_s": 0.0233,
+            "bandwidth_gb_s": 10.73
+          },
+          "read": {
+            "mean_s": 0.0063,
+            "median_s": 0.0061,
+            "bandwidth_gb_s": 41.13
+          },
+          "copy": {
+            "mean_s": 0.0231,
+            "median_s": 0.0241,
+            "bandwidth_gb_s": 10.36
+          }
+        }
+      },
+      "gpu_compute": {
+        "test": "GPU Compute (Raw)",
+        "status": "completed",
+        "device": "Apple Silicon (MPS)",
+        "backend": "Metal/MPS",
+        "gpu_index": 0,
+        "results": {
+          "1024x1024": {
+            "times_s": [
+              0.0027,
+              0.0028,
+              0.0027
+            ],
+            "mean_s": 0.0027,
+            "median_s": 0.0027,
+            "gflops": 784.22
+          },
+          "2048x2048": {
+            "times_s": [
+              0.0088,
+              0.0115,
+              0.0095
+            ],
+            "mean_s": 0.0099,
+            "median_s": 0.0095,
+            "gflops": 1806.89
+          },
+          "4096x4096": {
+            "times_s": [
+              0.0469,
+              0.0472,
+              0.0473
+            ],
+            "mean_s": 0.0471,
+            "median_s": 0.0472,
+            "gflops": 2909.65
+          }
+        }
+      },
+      "gpu_system": {
+        "test": "GPU System Score",
+        "status": "completed",
+        "device": "Apple Silicon (MPS)",
+        "backend": "Metal/MPS",
+        "gpu_index": 0,
+        "results": {
+          "1024x1024": {
+            "pipeline_times_s": [
+              0.0039,
+              0.0041,
+              0.0042
+            ],
+            "pipeline_median_s": 0.0041,
+            "transfer_to_median_s": 0.001,
+            "compute_median_s": 0.0026,
+            "transfer_back_median_s": 0.0005,
+            "gflops_pipeline": 524.92,
+            "gflops_compute": 813.86,
+            "transfer_bandwidth_gb_s": 8.07,
+            "data_transferred_gb": 0.0117,
+            "pct_transfer_to": 23.8,
+            "pct_compute": 64.5,
+            "pct_transfer_back": 11.7
+          },
+          "2048x2048": {
+            "pipeline_times_s": [
+              0.016,
+              0.0205,
+              0.0154
+            ],
+            "pipeline_median_s": 0.016,
+            "transfer_to_median_s": 0.0018,
+            "compute_median_s": 0.0131,
+            "transfer_back_median_s": 0.0008,
+            "gflops_pipeline": 1074.06,
+            "gflops_compute": 1306.91,
+            "transfer_bandwidth_gb_s": 18.06,
+            "data_transferred_gb": 0.0469,
+            "pct_transfer_to": 11.4,
+            "pct_compute": 82.2,
+            "pct_transfer_back": 4.9
+          },
+          "4096x4096": {
+            "pipeline_times_s": [
+              0.0714,
+              0.0719,
+              0.0649
+            ],
+            "pipeline_median_s": 0.0714,
+            "transfer_to_median_s": 0.0062,
+            "compute_median_s": 0.0585,
+            "transfer_back_median_s": 0.0042,
+            "gflops_pipeline": 1925.75,
+            "gflops_compute": 2349.11,
+            "transfer_bandwidth_gb_s": 18.07,
+            "data_transferred_gb": 0.1875,
+            "pct_transfer_to": 8.7,
+            "pct_compute": 82.0,
+            "pct_transfer_back": 5.8
+          }
+        }
+      }
+    },
+    "resource_usage": {
+      "n_samples": 33,
+      "duration_s": 18.28450298309326,
+      "cpu": {
+        "avg_percent": 16.1,
+        "max_percent": 29.8,
+        "min_percent": 8.4
+      },
+      "ram": {
+        "avg_percent": 67.9,
+        "max_percent": 74.4,
+        "peak_used_gb": 5.86
+      }
+    }
+  },
+  "ai_benchmarks": {
+    "type": "ai_benchmarks",
+    "prompt": "Explain the concept of artificial intelligence in simple terms. What are its main applications and how does it impact our daily lives? Provide specific examples.",
+    "inference_config": {
+      "max_tokens": 256,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "repeat_penalty": 1.1,
+      "n_ctx": 2048,
+      "seed": 42,
+      "n_warmup_runs": 2,
+      "n_benchmark_runs": 3
+    },
+    "total_time_s": 269.83,
+    "models_tested": 1,
+    "results": {
+      "tinyllama-1.1b": {
+        "model": "TinyLlama 1.1B",
+        "params": "1.1B",
+        "status": "completed",
+        "runs": [
+          {
+            "tokens_generated": 256,
+            "total_time_s": 3.0014,
+            "first_token_latency_s": 0.0301,
+            "tokens_per_second": 85.29,
+            "memory_before_gb": 1.92,
+            "memory_after_gb": 1.92,
+            "memory_delta_gb": 0.0,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 11.65,
+            "p90_inter_token_latency_ms": 10.96
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 3.0385,
+            "first_token_latency_s": 0.011,
+            "tokens_per_second": 84.25,
+            "memory_before_gb": 1.92,
+            "memory_after_gb": 1.92,
+            "memory_delta_gb": 0.0,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 11.87,
+            "p90_inter_token_latency_ms": 11.2
+          },
+          {
+            "tokens_generated": 256,
+            "total_time_s": 3.0217,
+            "first_token_latency_s": 0.0111,
+            "tokens_per_second": 84.72,
+            "memory_before_gb": 1.92,
+            "memory_after_gb": 1.92,
+            "memory_delta_gb": 0.0,
+            "error": null,
+            "success": true,
+            "avg_inter_token_latency_ms": 11.81,
+            "p90_inter_token_latency_ms": 11.11
+          }
+        ],
+        "backend": {
+          "backend": "metal",
+          "n_gpu_layers": -1,
+          "details": "GPU sélectionné : Apple M2 (Metal)"
+        },
+        "model_load_time_s": 0.67,
+        "resource_usage": {
+          "n_samples": 15,
+          "duration_s": 8.62926983833313,
+          "cpu": {
+            "avg_percent": 11.7,
+            "max_percent": 16.1,
+            "min_percent": 10.2
+          },
+          "ram": {
+            "avg_percent": 71.3,
+            "max_percent": 71.4,
+            "peak_used_gb": 5.39
+          }
+        },
+        "summary": {
+          "n_successful_runs": 3,
+          "n_total_runs": 3,
+          "avg_tokens_per_second": 84.75,
+          "std_tokens_per_second": 0.43,
+          "avg_first_token_latency_s": 0.0174,
+          "avg_total_time_s": 3.0205,
+          "peak_memory_gb": 1.92,
+          "stability": "stable"
+        }
+      }
+    },
+    "quantization_comparison": {
+      "tinyllama-1.1b": {
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "Q2_K",
+          "Q3_K_M",
+          "Q4_K_M",
+          "Q5_K_M",
+          "Q6_K",
+          "Q8_0"
+        ],
+        "results": {
+          "Q2_K": {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.022,
+                "first_token_latency_s": 0.0534,
+                "tokens_per_second": 84.71,
+                "memory_before_gb": 1.734,
+                "memory_after_gb": 1.734,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.64,
+                "p90_inter_token_latency_ms": 10.97
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0129,
+                "first_token_latency_s": 0.0109,
+                "tokens_per_second": 84.97,
+                "memory_before_gb": 1.734,
+                "memory_after_gb": 1.734,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.77,
+                "p90_inter_token_latency_ms": 11.13
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9921,
+                "first_token_latency_s": 0.0107,
+                "tokens_per_second": 85.56,
+                "memory_before_gb": 1.734,
+                "memory_after_gb": 1.734,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.69,
+                "p90_inter_token_latency_ms": 11.14
+              }
+            ],
+            "actual_file_size_gb": 0.45,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 0.49,
+            "memory_after_load_gb": 1.732,
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.592325925827026,
+              "cpu": {
+                "avg_percent": 12.3,
+                "max_percent": 19.9,
+                "min_percent": 9.6
+              },
+              "ram": {
+                "avg_percent": 71.4,
+                "max_percent": 71.5,
+                "peak_used_gb": 5.3
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.08,
+              "std_tokens_per_second": 0.36,
+              "min_tokens_per_second": 84.71,
+              "max_tokens_per_second": 85.56,
+              "avg_first_token_latency_s": 0.025,
+              "avg_inter_token_latency_ms": 11.7,
+              "avg_total_time_s": 3.009,
+              "peak_memory_gb": 1.734,
+              "stability": "stable"
+            }
+          },
+          "Q3_K_M": {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.51,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.1357,
+                "first_token_latency_s": 0.0533,
+                "tokens_per_second": 81.64,
+                "memory_before_gb": 1.794,
+                "memory_after_gb": 1.794,
+                "memory_delta_gb": 0.001,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.09,
+                "p90_inter_token_latency_ms": 11.37
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.1249,
+                "first_token_latency_s": 0.0527,
+                "tokens_per_second": 81.92,
+                "memory_before_gb": 1.794,
+                "memory_after_gb": 1.794,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.05,
+                "p90_inter_token_latency_ms": 11.3
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0883,
+                "first_token_latency_s": 0.0115,
+                "tokens_per_second": 82.89,
+                "memory_before_gb": 1.794,
+                "memory_after_gb": 1.794,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.06,
+                "p90_inter_token_latency_ms": 11.39
+              }
+            ],
+            "actual_file_size_gb": 0.513,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 0.55,
+            "memory_after_load_gb": 1.791,
+            "resource_usage": {
+              "n_samples": 16,
+              "duration_s": 9.231698989868164,
+              "cpu": {
+                "avg_percent": 11.1,
+                "max_percent": 12.9,
+                "min_percent": 9.7
+              },
+              "ram": {
+                "avg_percent": 71.4,
+                "max_percent": 71.5,
+                "peak_used_gb": 5.29
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 82.15,
+              "std_tokens_per_second": 0.54,
+              "min_tokens_per_second": 81.64,
+              "max_tokens_per_second": 82.89,
+              "avg_first_token_latency_s": 0.0392,
+              "avg_inter_token_latency_ms": 12.07,
+              "avg_total_time_s": 3.1163,
+              "peak_memory_gb": 1.794,
+              "stability": "stable"
+            }
+          },
+          "Q4_K_M": {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.62,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9714,
+                "first_token_latency_s": 0.0279,
+                "tokens_per_second": 86.15,
+                "memory_before_gb": 1.896,
+                "memory_after_gb": 1.896,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.54,
+                "p90_inter_token_latency_ms": 10.99
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.974,
+                "first_token_latency_s": 0.0111,
+                "tokens_per_second": 86.08,
+                "memory_before_gb": 1.896,
+                "memory_after_gb": 1.896,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.62,
+                "p90_inter_token_latency_ms": 11.14
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9844,
+                "first_token_latency_s": 0.0113,
+                "tokens_per_second": 85.78,
+                "memory_before_gb": 1.896,
+                "memory_after_gb": 1.896,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.66,
+                "p90_inter_token_latency_ms": 11.26
+              }
+            ],
+            "actual_file_size_gb": 0.623,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 0.67,
+            "memory_after_load_gb": 1.894,
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.541605949401855,
+              "cpu": {
+                "avg_percent": 12.1,
+                "max_percent": 16.5,
+                "min_percent": 9.5
+              },
+              "ram": {
+                "avg_percent": 71.9,
+                "max_percent": 72.0,
+                "peak_used_gb": 5.35
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.0,
+              "std_tokens_per_second": 0.16,
+              "min_tokens_per_second": 85.78,
+              "max_tokens_per_second": 86.15,
+              "avg_first_token_latency_s": 0.0168,
+              "avg_inter_token_latency_ms": 11.61,
+              "avg_total_time_s": 2.9766,
+              "peak_memory_gb": 1.896,
+              "stability": "stable"
+            }
+          },
+          "Q5_K_M": {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.73,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.3318,
+                "first_token_latency_s": 0.0479,
+                "tokens_per_second": 76.84,
+                "memory_before_gb": 2.003,
+                "memory_after_gb": 2.003,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.88,
+                "p90_inter_token_latency_ms": 12.42
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.258,
+                "first_token_latency_s": 0.0121,
+                "tokens_per_second": 78.57,
+                "memory_before_gb": 2.003,
+                "memory_after_gb": 2.003,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.73,
+                "p90_inter_token_latency_ms": 12.58
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.3206,
+                "first_token_latency_s": 0.012,
+                "tokens_per_second": 77.09,
+                "memory_before_gb": 2.003,
+                "memory_after_gb": 2.003,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 12.97,
+                "p90_inter_token_latency_ms": 12.63
+              }
+            ],
+            "actual_file_size_gb": 0.729,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 0.74,
+            "memory_after_load_gb": 2.001,
+            "resource_usage": {
+              "n_samples": 17,
+              "duration_s": 9.711164951324463,
+              "cpu": {
+                "avg_percent": 12.1,
+                "max_percent": 16.8,
+                "min_percent": 10.1
+              },
+              "ram": {
+                "avg_percent": 73.1,
+                "max_percent": 73.9,
+                "peak_used_gb": 5.69
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 77.5,
+              "std_tokens_per_second": 0.76,
+              "min_tokens_per_second": 76.84,
+              "max_tokens_per_second": 78.57,
+              "avg_first_token_latency_s": 0.024,
+              "avg_inter_token_latency_ms": 12.86,
+              "avg_total_time_s": 3.3035,
+              "peak_memory_gb": 2.003,
+              "stability": "stable"
+            }
+          },
+          "Q6_K": {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.84,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.4708,
+                "first_token_latency_s": 0.0279,
+                "tokens_per_second": 73.76,
+                "memory_before_gb": 2.115,
+                "memory_after_gb": 2.116,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 13.5,
+                "p90_inter_token_latency_ms": 13.15
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.4987,
+                "first_token_latency_s": 0.0133,
+                "tokens_per_second": 73.17,
+                "memory_before_gb": 2.116,
+                "memory_after_gb": 2.116,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 13.67,
+                "p90_inter_token_latency_ms": 13.3
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.4792,
+                "first_token_latency_s": 0.0133,
+                "tokens_per_second": 73.58,
+                "memory_before_gb": 2.116,
+                "memory_after_gb": 2.116,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 13.59,
+                "p90_inter_token_latency_ms": 13.17
+              }
+            ],
+            "actual_file_size_gb": 0.842,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 0.88,
+            "memory_after_load_gb": 2.113,
+            "resource_usage": {
+              "n_samples": 18,
+              "duration_s": 10.334841012954712,
+              "cpu": {
+                "avg_percent": 11.4,
+                "max_percent": 16.0,
+                "min_percent": 9.5
+              },
+              "ram": {
+                "avg_percent": 72.6,
+                "max_percent": 72.6,
+                "peak_used_gb": 5.4
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 73.5,
+              "std_tokens_per_second": 0.25,
+              "min_tokens_per_second": 73.17,
+              "max_tokens_per_second": 73.76,
+              "avg_first_token_latency_s": 0.0182,
+              "avg_inter_token_latency_ms": 13.59,
+              "avg_total_time_s": 3.4829,
+              "peak_memory_gb": 2.116,
+              "stability": "stable"
+            }
+          },
+          "Q8_0": {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "status": "completed",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.2328,
+                "first_token_latency_s": 0.0302,
+                "tokens_per_second": 60.48,
+                "memory_before_gb": 2.359,
+                "memory_after_gb": 2.36,
+                "memory_delta_gb": 0.001,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.48,
+                "p90_inter_token_latency_ms": 22.11
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.2324,
+                "first_token_latency_s": 0.0162,
+                "tokens_per_second": 60.49,
+                "memory_before_gb": 2.36,
+                "memory_after_gb": 2.36,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.53,
+                "p90_inter_token_latency_ms": 26.8
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 4.2517,
+                "first_token_latency_s": 0.0159,
+                "tokens_per_second": 60.21,
+                "memory_before_gb": 2.36,
+                "memory_after_gb": 2.36,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 16.61,
+                "p90_inter_token_latency_ms": 27.25
+              }
+            ],
+            "actual_file_size_gb": 1.09,
+            "backend": {
+              "backend": "metal",
+              "n_gpu_layers": -1,
+              "details": "GPU sélectionné : Apple M2 (Metal)"
+            },
+            "model_load_time_s": 1.09,
+            "memory_after_load_gb": 2.357,
+            "resource_usage": {
+              "n_samples": 21,
+              "duration_s": 12.26780891418457,
+              "cpu": {
+                "avg_percent": 11.5,
+                "max_percent": 18.7,
+                "min_percent": 9.8
+              },
+              "ram": {
+                "avg_percent": 73.7,
+                "max_percent": 73.8,
+                "peak_used_gb": 5.6
+              }
+            },
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 60.39,
+              "std_tokens_per_second": 0.13,
+              "min_tokens_per_second": 60.21,
+              "max_tokens_per_second": 60.49,
+              "avg_first_token_latency_s": 0.0208,
+              "avg_inter_token_latency_ms": 16.54,
+              "avg_total_time_s": 4.239,
+              "peak_memory_gb": 2.36,
+              "stability": "stable"
+            }
+          }
+        },
+        "total_time_s": 103.35,
+        "comparison_table": [
+          {
+            "quantization": "Q2_K",
+            "bits": 2,
+            "file_size_gb": 0.45,
+            "tokens_per_second": 85.08,
+            "first_token_latency_s": 0.025,
+            "inter_token_latency_ms": 11.7,
+            "peak_memory_gb": 1.734,
+            "model_load_time_s": 0.49,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q3_K_M",
+            "bits": 3,
+            "file_size_gb": 0.513,
+            "tokens_per_second": 82.15,
+            "first_token_latency_s": 0.0392,
+            "inter_token_latency_ms": 12.07,
+            "peak_memory_gb": 1.794,
+            "model_load_time_s": 0.55,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q4_K_M",
+            "bits": 4,
+            "file_size_gb": 0.623,
+            "tokens_per_second": 86.0,
+            "first_token_latency_s": 0.0168,
+            "inter_token_latency_ms": 11.61,
+            "peak_memory_gb": 1.896,
+            "model_load_time_s": 0.67,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q5_K_M",
+            "bits": 5,
+            "file_size_gb": 0.729,
+            "tokens_per_second": 77.5,
+            "first_token_latency_s": 0.024,
+            "inter_token_latency_ms": 12.86,
+            "peak_memory_gb": 2.003,
+            "model_load_time_s": 0.74,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q6_K",
+            "bits": 6,
+            "file_size_gb": 0.842,
+            "tokens_per_second": 73.5,
+            "first_token_latency_s": 0.0182,
+            "inter_token_latency_ms": 13.59,
+            "peak_memory_gb": 2.116,
+            "model_load_time_s": 0.88,
+            "stability": "stable"
+          },
+          {
+            "quantization": "Q8_0",
+            "bits": 8,
+            "file_size_gb": 1.09,
+            "tokens_per_second": 60.39,
+            "first_token_latency_s": 0.0208,
+            "inter_token_latency_ms": 16.54,
+            "peak_memory_gb": 2.36,
+            "model_load_time_s": 1.09,
+            "stability": "stable"
+          }
+        ]
+      }
+    },
+    "temperature_comparison": {
+      "tinyllama-1.1b": {
+        "axis": "temperature",
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "status": "completed",
+        "results": {
+          "low": {
+            "temperature": 0.25,
+            "label": "Basse (0.25)",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9652,
+                "first_token_latency_s": 0.0477,
+                "tokens_per_second": 86.34,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.44,
+                "p90_inter_token_latency_ms": 10.99
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9606,
+                "first_token_latency_s": 0.0109,
+                "tokens_per_second": 86.47,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.57,
+                "p90_inter_token_latency_ms": 11.18
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.954,
+                "first_token_latency_s": 0.0111,
+                "tokens_per_second": 86.66,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.54,
+                "p90_inter_token_latency_ms": 11.13
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.49,
+              "std_tokens_per_second": 0.13,
+              "avg_first_token_latency_s": 0.0232,
+              "avg_inter_token_latency_ms": 11.52,
+              "avg_total_time_s": 2.9599,
+              "peak_memory_gb": 1.902,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.453797817230225,
+              "cpu": {
+                "avg_percent": 10.8,
+                "max_percent": 12.3,
+                "min_percent": 9.8
+              },
+              "ram": {
+                "avg_percent": 71.6,
+                "max_percent": 71.7,
+                "peak_used_gb": 5.32
+              }
+            }
+          },
+          "medium": {
+            "temperature": 0.5,
+            "label": "Moyenne (0.50)",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0018,
+                "first_token_latency_s": 0.0652,
+                "tokens_per_second": 85.28,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.52,
+                "p90_inter_token_latency_ms": 11.08
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9639,
+                "first_token_latency_s": 0.0107,
+                "tokens_per_second": 86.37,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.58,
+                "p90_inter_token_latency_ms": 11.07
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9585,
+                "first_token_latency_s": 0.011,
+                "tokens_per_second": 86.53,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.56,
+                "p90_inter_token_latency_ms": 11.2
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.06,
+              "std_tokens_per_second": 0.56,
+              "avg_first_token_latency_s": 0.029,
+              "avg_inter_token_latency_ms": 11.55,
+              "avg_total_time_s": 2.9747,
+              "peak_memory_gb": 1.902,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.476887941360474,
+              "cpu": {
+                "avg_percent": 10.9,
+                "max_percent": 16.6,
+                "min_percent": 9.8
+              },
+              "ram": {
+                "avg_percent": 72.7,
+                "max_percent": 72.9,
+                "peak_used_gb": 5.52
+              }
+            }
+          },
+          "high": {
+            "temperature": 0.75,
+            "label": "Haute (0.75)",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9568,
+                "first_token_latency_s": 0.0282,
+                "tokens_per_second": 86.58,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.48,
+                "p90_inter_token_latency_ms": 11.02
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9513,
+                "first_token_latency_s": 0.0112,
+                "tokens_per_second": 86.74,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.53,
+                "p90_inter_token_latency_ms": 11.15
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9574,
+                "first_token_latency_s": 0.0109,
+                "tokens_per_second": 86.56,
+                "memory_before_gb": 1.902,
+                "memory_after_gb": 1.902,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.55,
+                "p90_inter_token_latency_ms": 11.16
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.63,
+              "std_tokens_per_second": 0.08,
+              "avg_first_token_latency_s": 0.0168,
+              "avg_inter_token_latency_ms": 11.52,
+              "avg_total_time_s": 2.9552,
+              "peak_memory_gb": 1.902,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.478945016860962,
+              "cpu": {
+                "avg_percent": 11.7,
+                "max_percent": 17.5,
+                "min_percent": 9.8
+              },
+              "ram": {
+                "avg_percent": 72.8,
+                "max_percent": 72.9,
+                "peak_used_gb": 5.52
+              }
+            }
+          }
+        },
+        "backend": {
+          "backend": "metal",
+          "n_gpu_layers": -1,
+          "details": "GPU sélectionné : Apple M2 (Metal)"
+        },
+        "comparison_table": [
+          {
+            "temperature_key": "low",
+            "temperature": 0.25,
+            "label": "Basse (0.25)",
+            "tokens_per_second": 86.49,
+            "first_token_latency_s": 0.0232,
+            "inter_token_latency_ms": 11.52,
+            "peak_memory_gb": 1.902,
+            "stability": "stable"
+          },
+          {
+            "temperature_key": "medium",
+            "temperature": 0.5,
+            "label": "Moyenne (0.50)",
+            "tokens_per_second": 86.06,
+            "first_token_latency_s": 0.029,
+            "inter_token_latency_ms": 11.55,
+            "peak_memory_gb": 1.902,
+            "stability": "stable"
+          },
+          {
+            "temperature_key": "high",
+            "temperature": 0.75,
+            "label": "Haute (0.75)",
+            "tokens_per_second": 86.63,
+            "first_token_latency_s": 0.0168,
+            "inter_token_latency_ms": 11.52,
+            "peak_memory_gb": 1.902,
+            "stability": "stable"
+          }
+        ]
+      }
+    },
+    "language_comparison": {
+      "tinyllama-1.1b": {
+        "axis": "language",
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "en",
+          "fr",
+          "zh",
+          "es",
+          "de",
+          "ar"
+        ],
+        "status": "completed",
+        "results": {
+          "en": {
+            "language": "en",
+            "label": "Anglais",
+            "flag": "🇬🇧",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9907,
+                "first_token_latency_s": 0.0482,
+                "tokens_per_second": 85.6,
+                "memory_before_gb": 1.91,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.001,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.54,
+                "p90_inter_token_latency_ms": 11.18
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9655,
+                "first_token_latency_s": 0.0113,
+                "tokens_per_second": 86.33,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.58,
+                "p90_inter_token_latency_ms": 11.07
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9661,
+                "first_token_latency_s": 0.0111,
+                "tokens_per_second": 86.31,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.59,
+                "p90_inter_token_latency_ms": 11.14
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.08,
+              "std_tokens_per_second": 0.34,
+              "avg_first_token_latency_s": 0.0235,
+              "avg_inter_token_latency_ms": 11.57,
+              "avg_total_time_s": 2.9741,
+              "peak_memory_gb": 1.911,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.452574968338013,
+              "cpu": {
+                "avg_percent": 10.8,
+                "max_percent": 12.2,
+                "min_percent": 9.7
+              },
+              "ram": {
+                "avg_percent": 70.2,
+                "max_percent": 70.3,
+                "peak_used_gb": 5.11
+              }
+            }
+          },
+          "fr": {
+            "language": "fr",
+            "label": "Français",
+            "flag": "🇫🇷",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0247,
+                "first_token_latency_s": 0.1152,
+                "tokens_per_second": 84.64,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.41,
+                "p90_inter_token_latency_ms": 11.16
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9748,
+                "first_token_latency_s": 0.0305,
+                "tokens_per_second": 86.06,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": -0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.55,
+                "p90_inter_token_latency_ms": 11.14
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9753,
+                "first_token_latency_s": 0.011,
+                "tokens_per_second": 86.04,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.62,
+                "p90_inter_token_latency_ms": 11.22
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.58,
+              "std_tokens_per_second": 0.66,
+              "avg_first_token_latency_s": 0.0522,
+              "avg_inter_token_latency_ms": 11.53,
+              "avg_total_time_s": 2.9916,
+              "peak_memory_gb": 1.911,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.474617004394531,
+              "cpu": {
+                "avg_percent": 13.0,
+                "max_percent": 23.6,
+                "min_percent": 9.7
+              },
+              "ram": {
+                "avg_percent": 70.7,
+                "max_percent": 70.9,
+                "peak_used_gb": 5.22
+              }
+            }
+          },
+          "zh": {
+            "language": "zh",
+            "label": "Mandarin",
+            "flag": "🇨🇳",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.095,
+                "first_token_latency_s": 0.0952,
+                "tokens_per_second": 82.71,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.76,
+                "p90_inter_token_latency_ms": 11.18
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0076,
+                "first_token_latency_s": 0.0111,
+                "tokens_per_second": 85.12,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.75,
+                "p90_inter_token_latency_ms": 11.19
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9935,
+                "first_token_latency_s": 0.0115,
+                "tokens_per_second": 85.52,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.69,
+                "p90_inter_token_latency_ms": 11.17
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 84.45,
+              "std_tokens_per_second": 1.24,
+              "avg_first_token_latency_s": 0.0393,
+              "avg_inter_token_latency_ms": 11.73,
+              "avg_total_time_s": 3.032,
+              "peak_memory_gb": 1.911,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 16,
+              "duration_s": 9.06746506690979,
+              "cpu": {
+                "avg_percent": 11.2,
+                "max_percent": 14.8,
+                "min_percent": 9.2
+              },
+              "ram": {
+                "avg_percent": 70.8,
+                "max_percent": 70.9,
+                "peak_used_gb": 5.22
+              }
+            }
+          },
+          "es": {
+            "language": "es",
+            "label": "Espagnol",
+            "flag": "🇪🇸",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0744,
+                "first_token_latency_s": 0.1326,
+                "tokens_per_second": 83.27,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.54,
+                "p90_inter_token_latency_ms": 11.1
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9616,
+                "first_token_latency_s": 0.0473,
+                "tokens_per_second": 86.44,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.43,
+                "p90_inter_token_latency_ms": 11.12
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9936,
+                "first_token_latency_s": 0.0277,
+                "tokens_per_second": 85.51,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.63,
+                "p90_inter_token_latency_ms": 11.24
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.07,
+              "std_tokens_per_second": 1.33,
+              "avg_first_token_latency_s": 0.0692,
+              "avg_inter_token_latency_ms": 11.53,
+              "avg_total_time_s": 3.0099,
+              "peak_memory_gb": 1.911,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.462552070617676,
+              "cpu": {
+                "avg_percent": 10.5,
+                "max_percent": 15.1,
+                "min_percent": 9.2
+              },
+              "ram": {
+                "avg_percent": 71.0,
+                "max_percent": 72.0,
+                "peak_used_gb": 5.41
+              }
+            }
+          },
+          "de": {
+            "language": "de",
+            "label": "Allemand",
+            "flag": "🇩🇪",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0134,
+                "first_token_latency_s": 0.0984,
+                "tokens_per_second": 84.95,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.43,
+                "p90_inter_token_latency_ms": 11.11
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9967,
+                "first_token_latency_s": 0.0297,
+                "tokens_per_second": 85.43,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.63,
+                "p90_inter_token_latency_ms": 11.2
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9844,
+                "first_token_latency_s": 0.0115,
+                "tokens_per_second": 85.78,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.911,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.66,
+                "p90_inter_token_latency_ms": 11.2
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.39,
+              "std_tokens_per_second": 0.34,
+              "avg_first_token_latency_s": 0.0465,
+              "avg_inter_token_latency_ms": 11.57,
+              "avg_total_time_s": 2.9982,
+              "peak_memory_gb": 1.911,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.461212158203125,
+              "cpu": {
+                "avg_percent": 10.5,
+                "max_percent": 11.8,
+                "min_percent": 9.8
+              },
+              "ram": {
+                "avg_percent": 71.5,
+                "max_percent": 71.8,
+                "peak_used_gb": 5.37
+              }
+            }
+          },
+          "ar": {
+            "language": "ar",
+            "label": "Arabe",
+            "flag": "🇸🇦",
+            "runs": [
+              {
+                "tokens_generated": 255,
+                "total_time_s": 3.1369,
+                "first_token_latency_s": 0.1241,
+                "tokens_per_second": 81.29,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.001,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.86,
+                "p90_inter_token_latency_ms": 11.4
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0379,
+                "first_token_latency_s": 0.0115,
+                "tokens_per_second": 84.27,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.87,
+                "p90_inter_token_latency_ms": 11.5
+              },
+              {
+                "tokens_generated": 255,
+                "total_time_s": 3.0394,
+                "first_token_latency_s": 0.0115,
+                "tokens_per_second": 83.9,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.92,
+                "p90_inter_token_latency_ms": 11.57
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 83.15,
+              "std_tokens_per_second": 1.33,
+              "avg_first_token_latency_s": 0.049,
+              "avg_inter_token_latency_ms": 11.88,
+              "avg_total_time_s": 3.0714,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 16,
+              "duration_s": 9.082225799560547,
+              "cpu": {
+                "avg_percent": 11.9,
+                "max_percent": 16.8,
+                "min_percent": 9.4
+              },
+              "ram": {
+                "avg_percent": 71.6,
+                "max_percent": 71.8,
+                "peak_used_gb": 5.37
+              }
+            }
+          }
+        },
+        "backend": {
+          "backend": "metal",
+          "n_gpu_layers": -1,
+          "details": "GPU sélectionné : Apple M2 (Metal)"
+        },
+        "comparison_table": [
+          {
+            "language_key": "en",
+            "label": "Anglais",
+            "flag": "🇬🇧",
+            "tokens_per_second": 86.08,
+            "first_token_latency_s": 0.0235,
+            "inter_token_latency_ms": 11.57,
+            "peak_memory_gb": 1.911,
+            "stability": "stable"
+          },
+          {
+            "language_key": "fr",
+            "label": "Français",
+            "flag": "🇫🇷",
+            "tokens_per_second": 85.58,
+            "first_token_latency_s": 0.0522,
+            "inter_token_latency_ms": 11.53,
+            "peak_memory_gb": 1.911,
+            "stability": "stable"
+          },
+          {
+            "language_key": "zh",
+            "label": "Mandarin",
+            "flag": "🇨🇳",
+            "tokens_per_second": 84.45,
+            "first_token_latency_s": 0.0393,
+            "inter_token_latency_ms": 11.73,
+            "peak_memory_gb": 1.911,
+            "stability": "stable"
+          },
+          {
+            "language_key": "es",
+            "label": "Espagnol",
+            "flag": "🇪🇸",
+            "tokens_per_second": 85.07,
+            "first_token_latency_s": 0.0692,
+            "inter_token_latency_ms": 11.53,
+            "peak_memory_gb": 1.911,
+            "stability": "stable"
+          },
+          {
+            "language_key": "de",
+            "label": "Allemand",
+            "flag": "🇩🇪",
+            "tokens_per_second": 85.39,
+            "first_token_latency_s": 0.0465,
+            "inter_token_latency_ms": 11.57,
+            "peak_memory_gb": 1.911,
+            "stability": "stable"
+          },
+          {
+            "language_key": "ar",
+            "label": "Arabe",
+            "flag": "🇸🇦",
+            "tokens_per_second": 83.15,
+            "first_token_latency_s": 0.049,
+            "inter_token_latency_ms": 11.88,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          }
+        ]
+      }
+    },
+    "prompt_type_comparison": {
+      "tinyllama-1.1b": {
+        "axis": "prompt_type",
+        "model_name": "TinyLlama 1.1B",
+        "model_key": "tinyllama-1.1b",
+        "params": "1.1B",
+        "variants_tested": [
+          "general",
+          "code",
+          "reasoning",
+          "creative",
+          "math"
+        ],
+        "status": "completed",
+        "results": {
+          "general": {
+            "prompt_type": "general",
+            "label": "Général / Connaissances",
+            "icon": "📚",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9775,
+                "first_token_latency_s": 0.0495,
+                "tokens_per_second": 85.98,
+                "memory_before_gb": 1.911,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.48,
+                "p90_inter_token_latency_ms": 11.08
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9596,
+                "first_token_latency_s": 0.0112,
+                "tokens_per_second": 86.5,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.56,
+                "p90_inter_token_latency_ms": 11.12
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9702,
+                "first_token_latency_s": 0.0113,
+                "tokens_per_second": 86.19,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.6,
+                "p90_inter_token_latency_ms": 11.11
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 86.22,
+              "std_tokens_per_second": 0.21,
+              "avg_first_token_latency_s": 0.024,
+              "avg_inter_token_latency_ms": 11.55,
+              "avg_total_time_s": 2.9691,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.449743270874023,
+              "cpu": {
+                "avg_percent": 12.8,
+                "max_percent": 36.0,
+                "min_percent": 9.4
+              },
+              "ram": {
+                "avg_percent": 70.5,
+                "max_percent": 70.7,
+                "peak_used_gb": 5.21
+              }
+            }
+          },
+          "code": {
+            "prompt_type": "code",
+            "label": "Code / Programmation",
+            "icon": "💻",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.1079,
+                "first_token_latency_s": 0.129,
+                "tokens_per_second": 82.37,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.68,
+                "p90_inter_token_latency_ms": 11.38
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9328,
+                "first_token_latency_s": 0.0114,
+                "tokens_per_second": 87.29,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.46,
+                "p90_inter_token_latency_ms": 11.14
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9811,
+                "first_token_latency_s": 0.0463,
+                "tokens_per_second": 85.88,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.51,
+                "p90_inter_token_latency_ms": 11.19
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.18,
+              "std_tokens_per_second": 2.07,
+              "avg_first_token_latency_s": 0.0622,
+              "avg_inter_token_latency_ms": 11.55,
+              "avg_total_time_s": 3.0073,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.480993032455444,
+              "cpu": {
+                "avg_percent": 12.1,
+                "max_percent": 20.5,
+                "min_percent": 9.6
+              },
+              "ram": {
+                "avg_percent": 70.8,
+                "max_percent": 71.0,
+                "peak_used_gb": 5.29
+              }
+            }
+          },
+          "reasoning": {
+            "prompt_type": "reasoning",
+            "label": "Raisonnement / Logique",
+            "icon": "🧠",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.1018,
+                "first_token_latency_s": 0.0966,
+                "tokens_per_second": 82.53,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.78,
+                "p90_inter_token_latency_ms": 11.32
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0183,
+                "first_token_latency_s": 0.0118,
+                "tokens_per_second": 84.81,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.79,
+                "p90_inter_token_latency_ms": 11.28
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0119,
+                "first_token_latency_s": 0.0109,
+                "tokens_per_second": 85.0,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.77,
+                "p90_inter_token_latency_ms": 11.28
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 84.11,
+              "std_tokens_per_second": 1.12,
+              "avg_first_token_latency_s": 0.0398,
+              "avg_inter_token_latency_ms": 11.78,
+              "avg_total_time_s": 3.044,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 16,
+              "duration_s": 9.062102794647217,
+              "cpu": {
+                "avg_percent": 11.1,
+                "max_percent": 13.3,
+                "min_percent": 9.7
+              },
+              "ram": {
+                "avg_percent": 71.0,
+                "max_percent": 71.1,
+                "peak_used_gb": 5.31
+              }
+            }
+          },
+          "creative": {
+            "prompt_type": "creative",
+            "label": "Créatif / Rédaction",
+            "icon": "✍️",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0468,
+                "first_token_latency_s": 0.1236,
+                "tokens_per_second": 84.02,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.46,
+                "p90_inter_token_latency_ms": 11.13
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.976,
+                "first_token_latency_s": 0.0455,
+                "tokens_per_second": 86.02,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.49,
+                "p90_inter_token_latency_ms": 11.25
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 2.9819,
+                "first_token_latency_s": 0.011,
+                "tokens_per_second": 85.85,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.65,
+                "p90_inter_token_latency_ms": 11.18
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 85.3,
+              "std_tokens_per_second": 0.91,
+              "avg_first_token_latency_s": 0.06,
+              "avg_inter_token_latency_ms": 11.53,
+              "avg_total_time_s": 3.0016,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 15,
+              "duration_s": 8.461405992507935,
+              "cpu": {
+                "avg_percent": 10.7,
+                "max_percent": 15.6,
+                "min_percent": 9.4
+              },
+              "ram": {
+                "avg_percent": 71.3,
+                "max_percent": 71.8,
+                "peak_used_gb": 5.44
+              }
+            }
+          },
+          "math": {
+            "prompt_type": "math",
+            "label": "Mathématiques",
+            "icon": "🔢",
+            "runs": [
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.1684,
+                "first_token_latency_s": 0.1288,
+                "tokens_per_second": 80.8,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.92,
+                "p90_inter_token_latency_ms": 11.58
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0357,
+                "first_token_latency_s": 0.0114,
+                "tokens_per_second": 84.33,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.86,
+                "p90_inter_token_latency_ms": 11.31
+              },
+              {
+                "tokens_generated": 256,
+                "total_time_s": 3.0081,
+                "first_token_latency_s": 0.0118,
+                "tokens_per_second": 85.1,
+                "memory_before_gb": 1.912,
+                "memory_after_gb": 1.912,
+                "memory_delta_gb": 0.0,
+                "error": null,
+                "success": true,
+                "avg_inter_token_latency_ms": 11.75,
+                "p90_inter_token_latency_ms": 11.31
+              }
+            ],
+            "summary": {
+              "n_successful_runs": 3,
+              "n_total_runs": 3,
+              "avg_tokens_per_second": 83.41,
+              "std_tokens_per_second": 1.87,
+              "avg_first_token_latency_s": 0.0507,
+              "avg_inter_token_latency_ms": 11.84,
+              "avg_total_time_s": 3.0707,
+              "peak_memory_gb": 1.912,
+              "stability": "stable"
+            },
+            "resource_usage": {
+              "n_samples": 16,
+              "duration_s": 9.083490133285522,
+              "cpu": {
+                "avg_percent": 12.3,
+                "max_percent": 15.7,
+                "min_percent": 6.9
+              },
+              "ram": {
+                "avg_percent": 72.1,
+                "max_percent": 72.3,
+                "peak_used_gb": 5.53
+              }
+            }
+          }
+        },
+        "backend": {
+          "backend": "metal",
+          "n_gpu_layers": -1,
+          "details": "GPU sélectionné : Apple M2 (Metal)"
+        },
+        "comparison_table": [
+          {
+            "prompt_type_key": "general",
+            "label": "Général / Connaissances",
+            "icon": "📚",
+            "tokens_per_second": 86.22,
+            "first_token_latency_s": 0.024,
+            "inter_token_latency_ms": 11.55,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          },
+          {
+            "prompt_type_key": "code",
+            "label": "Code / Programmation",
+            "icon": "💻",
+            "tokens_per_second": 85.18,
+            "first_token_latency_s": 0.0622,
+            "inter_token_latency_ms": 11.55,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          },
+          {
+            "prompt_type_key": "reasoning",
+            "label": "Raisonnement / Logique",
+            "icon": "🧠",
+            "tokens_per_second": 84.11,
+            "first_token_latency_s": 0.0398,
+            "inter_token_latency_ms": 11.78,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          },
+          {
+            "prompt_type_key": "creative",
+            "label": "Créatif / Rédaction",
+            "icon": "✍️",
+            "tokens_per_second": 85.3,
+            "first_token_latency_s": 0.06,
+            "inter_token_latency_ms": 11.53,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          },
+          {
+            "prompt_type_key": "math",
+            "label": "Mathématiques",
+            "icon": "🔢",
+            "tokens_per_second": 83.41,
+            "first_token_latency_s": 0.0507,
+            "inter_token_latency_ms": 11.84,
+            "peak_memory_gb": 1.912,
+            "stability": "stable"
+          }
+        ]
+      }
+    }
+  }
+}
