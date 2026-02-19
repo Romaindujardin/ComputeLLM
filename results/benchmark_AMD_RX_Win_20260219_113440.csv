@@ -1,0 +1,42 @@
+machine,benchmark_type,test,sub_test,metric,value,mean_time_s
+AMD_RX_Win,classic,CPU Single-Thread,512x512,gflops,94.12,0.0028
+AMD_RX_Win,classic,CPU Single-Thread,1024x1024,gflops,107.01,0.0201
+AMD_RX_Win,classic,CPU Single-Thread,2048x2048,gflops,106.71,0.1612
+AMD_RX_Win,classic,CPU Multi-Thread,512x512,gflops,148.64,0.0018
+AMD_RX_Win,classic,CPU Multi-Thread,1024x1024,gflops,314.54,0.0068
+AMD_RX_Win,classic,CPU Multi-Thread,2048x2048,gflops,434.18,0.0396
+AMD_RX_Win,classic,Memory Bandwidth,write,bandwidth_gb_s,3.18,0.0808
+AMD_RX_Win,classic,Memory Bandwidth,read,bandwidth_gb_s,5.0,0.0516
+AMD_RX_Win,classic,Memory Bandwidth,copy,bandwidth_gb_s,3.08,0.0747
+AMD_RX_Win,ai_inference,TinyLlama 1.1B,tokens_per_second,tokens/s,48.18,5.3144
+AMD_RX_Win,ai_inference,TinyLlama 1.1B,first_token_latency,seconds,0.0377,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,tokens_per_second,tokens/s,65.03,3.9376
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,first_token_latency,seconds,0.0264,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,peak_memory,gb,0.798,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,model_load_time,seconds,1.54,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,file_size,gb,0.45,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,tokens_per_second,tokens/s,56.71,4.5176
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,first_token_latency,seconds,0.0366,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,peak_memory,gb,0.801,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,model_load_time,seconds,1.56,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,file_size,gb,0.513,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,tokens_per_second,tokens/s,50.47,5.0747
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,first_token_latency,seconds,0.0253,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,peak_memory,gb,0.918,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,model_load_time,seconds,1.57,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,file_size,gb,0.623,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,tokens_per_second,tokens/s,44.27,5.7871
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,first_token_latency,seconds,0.029,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,peak_memory,gb,1.018,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,model_load_time,seconds,1.56,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,file_size,gb,0.729,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,tokens_per_second,tokens/s,38.58,6.6372
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,first_token_latency,seconds,0.0321,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,peak_memory,gb,1.099,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,model_load_time,seconds,1.54,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,file_size,gb,0.842,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,tokens_per_second,tokens/s,29.89,0.4685
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,first_token_latency,seconds,0.0369,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,peak_memory,gb,1.312,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,model_load_time,seconds,1.56,0
+AMD_RX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,file_size,gb,1.09,0

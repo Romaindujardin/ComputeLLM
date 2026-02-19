@@ -1,0 +1,48 @@
+machine,benchmark_type,test,sub_test,metric,value,mean_time_s
+Apple_M1_macOS,classic,CPU Single-Thread,512x512,gflops,1201.05,0.0002
+Apple_M1_macOS,classic,CPU Single-Thread,1024x1024,gflops,977.05,0.0022
+Apple_M1_macOS,classic,CPU Single-Thread,2048x2048,gflops,917.36,0.0189
+Apple_M1_macOS,classic,CPU Multi-Thread,512x512,gflops,1190.4,0.0002
+Apple_M1_macOS,classic,CPU Multi-Thread,1024x1024,gflops,984.95,0.0022
+Apple_M1_macOS,classic,CPU Multi-Thread,2048x2048,gflops,896.47,0.019
+Apple_M1_macOS,classic,Memory Bandwidth,write,bandwidth_gb_s,6.45,0.0341
+Apple_M1_macOS,classic,Memory Bandwidth,read,bandwidth_gb_s,38.02,0.0066
+Apple_M1_macOS,classic,Memory Bandwidth,copy,bandwidth_gb_s,20.29,0.0292
+Apple_M1_macOS,classic,GPU Compute (Raw),1024x1024,gflops,1040.17,0.0021
+Apple_M1_macOS,classic,GPU Compute (Raw),2048x2048,gflops,1291.97,0.0134
+Apple_M1_macOS,classic,GPU Compute (Raw),4096x4096,gflops,1603.98,0.0872
+Apple_M1_macOS,classic,GPU System Score,1024x1024,bandwidth_gb_s,0,0
+Apple_M1_macOS,classic,GPU System Score,2048x2048,bandwidth_gb_s,0,0
+Apple_M1_macOS,classic,GPU System Score,4096x4096,bandwidth_gb_s,0,0
+Apple_M1_macOS,ai_inference,TinyLlama 1.1B,tokens_per_second,tokens/s,55.18,4.6402
+Apple_M1_macOS,ai_inference,TinyLlama 1.1B,first_token_latency,seconds,0.0239,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q2_K,tokens_per_second,tokens/s,59.15,4.3286
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q2_K,first_token_latency,seconds,0.0226,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q2_K,peak_memory,gb,0.94,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q2_K,model_load_time,seconds,0.37,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q2_K,file_size,gb,0.45,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q3_K_M,tokens_per_second,tokens/s,56.69,4.5155
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q3_K_M,first_token_latency,seconds,0.0557,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q3_K_M,peak_memory,gb,0.751,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q3_K_M,model_load_time,seconds,0.42,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q3_K_M,file_size,gb,0.513,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q4_K_M,tokens_per_second,tokens/s,54.87,4.6661
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q4_K_M,first_token_latency,seconds,0.0535,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q4_K_M,peak_memory,gb,0.725,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q4_K_M,model_load_time,seconds,0.52,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q4_K_M,file_size,gb,0.623,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q5_K_M,tokens_per_second,tokens/s,49.41,5.1813
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q5_K_M,first_token_latency,seconds,0.0329,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q5_K_M,peak_memory,gb,0.876,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q5_K_M,model_load_time,seconds,0.56,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q5_K_M,file_size,gb,0.729,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q6_K,tokens_per_second,tokens/s,46.12,5.5523
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q6_K,first_token_latency,seconds,0.0461,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q6_K,peak_memory,gb,1.036,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q6_K,model_load_time,seconds,0.69,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q6_K,file_size,gb,0.842,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q8_0,tokens_per_second,tokens/s,37.46,6.8346
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q8_0,first_token_latency,seconds,0.0326,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q8_0,peak_memory,gb,1.127,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q8_0,model_load_time,seconds,0.83,0
+Apple_M1_macOS,quantization_comparison,TinyLlama 1.1B Q8_0,file_size,gb,1.09,0

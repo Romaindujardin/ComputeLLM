@@ -1,0 +1,126 @@
+machine,benchmark_type,test,sub_test,metric,value,mean_time_s
+AMD_RTX_Win,classic,CPU Single-Thread,512x512,gflops,239.35,0.0011
+AMD_RTX_Win,classic,CPU Single-Thread,1024x1024,gflops,420.1,0.0051
+AMD_RTX_Win,classic,CPU Single-Thread,2048x2048,gflops,706.84,0.0243
+AMD_RTX_Win,classic,CPU Multi-Thread,512x512,gflops,239.77,0.0011
+AMD_RTX_Win,classic,CPU Multi-Thread,1024x1024,gflops,394.03,0.0055
+AMD_RTX_Win,classic,CPU Multi-Thread,2048x2048,gflops,651.89,0.0264
+AMD_RTX_Win,classic,Memory Bandwidth,write,bandwidth_gb_s,6.49,0.0385
+AMD_RTX_Win,classic,Memory Bandwidth,read,bandwidth_gb_s,7.91,0.0316
+AMD_RTX_Win,classic,Memory Bandwidth,copy,bandwidth_gb_s,5.55,0.0451
+AMD_RTX_Win,classic,GPU Compute,1024x1024,gflops,1121.17,0.0019
+AMD_RTX_Win,classic,GPU Compute,2048x2048,gflops,636.33,0.027
+AMD_RTX_Win,classic,GPU Compute,4096x4096,gflops,19945.86,0.0069
+AMD_RTX_Win,ai_inference,TinyLlama 1.1B,tokens_per_second,tokens/s,308.21,0.8308
+AMD_RTX_Win,ai_inference,TinyLlama 1.1B,first_token_latency,seconds,0.0057,0
+AMD_RTX_Win,ai_inference,Mistral 7B,tokens_per_second,tokens/s,82.29,3.111
+AMD_RTX_Win,ai_inference,Mistral 7B,first_token_latency,seconds,0.0143,0
+AMD_RTX_Win,ai_inference,Llama 2 13B,tokens_per_second,tokens/s,48.4,5.2891
+AMD_RTX_Win,ai_inference,Llama 2 13B,first_token_latency,seconds,0.023,0
+AMD_RTX_Win,ai_inference,CodeLlama 34B,tokens_per_second,tokens/s,1.59,160.4036
+AMD_RTX_Win,ai_inference,CodeLlama 34B,first_token_latency,seconds,0.6212,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,tokens_per_second,tokens/s,316.25,0.8096
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,first_token_latency,seconds,0.005,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,peak_memory,gb,1.28,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,model_load_time,seconds,0.33,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q2_K,file_size,gb,0.45,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,tokens_per_second,tokens/s,307.96,0.8314
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,first_token_latency,seconds,0.0068,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,peak_memory,gb,1.198,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,model_load_time,seconds,0.25,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q3_K_M,file_size,gb,0.513,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,tokens_per_second,tokens/s,311.76,0.8211
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,first_token_latency,seconds,0.0051,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,peak_memory,gb,1.255,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,model_load_time,seconds,0.3,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q4_K_M,file_size,gb,0.623,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,tokens_per_second,tokens/s,287.98,0.889
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,first_token_latency,seconds,0.0052,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,peak_memory,gb,1.354,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,model_load_time,seconds,0.33,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q5_K_M,file_size,gb,0.729,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,tokens_per_second,tokens/s,269.68,0.9493
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,first_token_latency,seconds,0.0054,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,peak_memory,gb,1.459,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,model_load_time,seconds,0.37,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q6_K,file_size,gb,0.842,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,tokens_per_second,tokens/s,235.16,1.0886
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,first_token_latency,seconds,0.0057,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,peak_memory,gb,1.692,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,model_load_time,seconds,0.45,0
+AMD_RTX_Win,quantization_comparison,TinyLlama 1.1B Q8_0,file_size,gb,1.09,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q2_K,tokens_per_second,tokens/s,95.54,2.6795
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q2_K,first_token_latency,seconds,0.0125,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q2_K,peak_memory,gb,3.502,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q2_K,model_load_time,seconds,1.59,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q2_K,file_size,gb,2.871,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q3_K_M,tokens_per_second,tokens/s,89.99,2.8449
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q3_K_M,first_token_latency,seconds,0.013,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q3_K_M,peak_memory,gb,3.896,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q3_K_M,model_load_time,seconds,1.76,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q3_K_M,file_size,gb,3.277,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q4_K_M,tokens_per_second,tokens/s,82.87,3.0893
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q4_K_M,first_token_latency,seconds,0.014,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q4_K_M,peak_memory,gb,4.671,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q4_K_M,model_load_time,seconds,1.65,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q4_K_M,file_size,gb,4.068,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q5_K_M,tokens_per_second,tokens/s,72.47,3.5324
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q5_K_M,first_token_latency,seconds,0.0157,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q5_K_M,peak_memory,gb,5.367,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q5_K_M,model_load_time,seconds,3.39,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q5_K_M,file_size,gb,4.779,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q6_K,tokens_per_second,tokens/s,63.96,4.0027
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q6_K,first_token_latency,seconds,0.0183,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q6_K,peak_memory,gb,6.106,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q6_K,model_load_time,seconds,2.98,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q6_K,file_size,gb,5.534,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q8_0,tokens_per_second,tokens/s,51.75,4.9468
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q8_0,first_token_latency,seconds,0.0211,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q8_0,peak_memory,gb,7.71,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q8_0,model_load_time,seconds,3.91,0
+AMD_RTX_Win,quantization_comparison,Mistral 7B Q8_0,file_size,gb,7.167,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q2_K,tokens_per_second,tokens/s,56.87,4.4309
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q2_K,first_token_latency,seconds,0.0202,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q2_K,peak_memory,gb,5.68,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q2_K,model_load_time,seconds,2.8,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q2_K,file_size,gb,5.056,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q3_K_M,tokens_per_second,tokens/s,53.28,4.8053
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q3_K_M,first_token_latency,seconds,0.0212,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q3_K_M,peak_memory,gb,6.511,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q3_K_M,model_load_time,seconds,3.18,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q3_K_M,file_size,gb,5.903,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q4_K_M,tokens_per_second,tokens/s,48.17,5.3146
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q4_K_M,first_token_latency,seconds,0.0234,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q4_K_M,peak_memory,gb,7.915,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q4_K_M,model_load_time,seconds,3.94,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q4_K_M,file_size,gb,7.326,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q5_K_M,tokens_per_second,tokens/s,31.59,8.1049
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q5_K_M,first_token_latency,seconds,0.0336,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q5_K_M,peak_memory,gb,9.292,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q5_K_M,model_load_time,seconds,4.6,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q5_K_M,file_size,gb,8.596,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q6_K,tokens_per_second,tokens/s,21.7,11.7958
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q6_K,first_token_latency,seconds,0.0429,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q6_K,peak_memory,gb,11.902,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q6_K,model_load_time,seconds,6.15,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q6_K,file_size,gb,9.946,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q8_0,tokens_per_second,tokens/s,6.57,38.9531
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q8_0,first_token_latency,seconds,0.1486,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q8_0,peak_memory,gb,17.582,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q8_0,model_load_time,seconds,9.71,0
+AMD_RTX_Win,quantization_comparison,Llama 2 13B Q8_0,file_size,gb,12.881,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q2_K,tokens_per_second,tokens/s,3.19,52.2953
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q2_K,first_token_latency,seconds,0.2925,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q2_K,peak_memory,gb,17.398,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q2_K,model_load_time,seconds,9.47,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q2_K,file_size,gb,13.235,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q3_K_M,tokens_per_second,tokens/s,2.34,109.559
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q3_K_M,first_token_latency,seconds,0.4244,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q3_K_M,peak_memory,gb,21.302,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q3_K_M,model_load_time,seconds,12.23,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q3_K_M,file_size,gb,15.165,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q4_K_M,tokens_per_second,tokens/s,1.69,151.7965
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q4_K_M,first_token_latency,seconds,0.5851,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q4_K_M,peak_memory,gb,28.501,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q4_K_M,model_load_time,seconds,17.09,0
+AMD_RTX_Win,quantization_comparison,CodeLlama 34B Q4_K_M,file_size,gb,18.831,0
