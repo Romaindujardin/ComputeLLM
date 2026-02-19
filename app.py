@@ -1888,32 +1888,92 @@ def _display_comparison(loaded_data: dict):
     # Comparaison CPU GFLOPS
     # ══════════════════════════════════════════════
     st.markdown("#### Comparaison CPU")
-    has_cpu = False
-    fig_cpu = go.Figure()
+    has_cpu_st = False
+    has_cpu_mt = False
+    fig_cpu_st = go.Figure()
+    fig_cpu_mt = go.Figure()
+
+    # Collecter toutes les tailles de matrices
+    all_cpu_sizes = []
+    for fname, data in loaded_data.items():
+        classic = data.get("classic_benchmarks", {}).get("benchmarks", {})
+        for sz in classic.get("cpu_single_thread", {}).get("results", {}):
+            if sz not in all_cpu_sizes:
+                all_cpu_sizes.append(sz)
+        for sz in classic.get("cpu_multi_thread", {}).get("results", {}):
+            if sz not in all_cpu_sizes:
+                all_cpu_sizes.append(sz)
+
     for fname, data in loaded_data.items():
         classic = data.get("classic_benchmarks", {}).get("benchmarks", {})
         cpu_st = classic.get("cpu_single_thread", {}).get("results", {})
         cpu_mt = classic.get("cpu_multi_thread", {}).get("results", {})
-        st_gflops = list(cpu_st.values())[-1].get("gflops", 0) if cpu_st else 0
-        mt_gflops = list(cpu_mt.values())[-1].get("gflops", 0) if cpu_mt else 0
-        if st_gflops or mt_gflops:
-            has_cpu = True
-            fig_cpu.add_trace(go.Bar(
+
+        if cpu_st:
+            has_cpu_st = True
+            st_gflops = [cpu_st.get(sz, {}).get("gflops", 0) for sz in all_cpu_sizes]
+            fig_cpu_st.add_trace(go.Bar(
                 name=result_labels[fname],
-                x=["Single-Thread", "Multi-Thread"],
-                y=[st_gflops, mt_gflops],
+                x=all_cpu_sizes,
+                y=st_gflops,
                 marker_color=result_colors[fname],
-                text=[f"{st_gflops:.1f}", f"{mt_gflops:.1f}"],
+                text=[f"{v:.1f}" for v in st_gflops],
                 textposition="outside",
             ))
-    if has_cpu:
-        fig_cpu.update_layout(
-            barmode="group",
-            title="Performance CPU — GFLOPS (plus grande matrice)",
-            yaxis_title="GFLOPS",
-            legend_title="Résultat",
-        )
-        st.plotly_chart(fig_cpu, use_container_width=True)
+
+        if cpu_mt:
+            has_cpu_mt = True
+            mt_gflops = [cpu_mt.get(sz, {}).get("gflops", 0) for sz in all_cpu_sizes]
+            fig_cpu_mt.add_trace(go.Bar(
+                name=result_labels[fname],
+                x=all_cpu_sizes,
+                y=mt_gflops,
+                marker_color=result_colors[fname],
+                text=[f"{v:.1f}" for v in mt_gflops],
+                textposition="outside",
+            ))
+
+    if has_cpu_st or has_cpu_mt:
+        col1, col2 = st.columns(2)
+        with col1:
+            if has_cpu_st:
+                fig_cpu_st.update_layout(
+                    barmode="group",
+                    title="CPU Single-Thread — GFLOPS par taille de matrice",
+                    yaxis_title="GFLOPS",
+                    xaxis_title="Taille matrice",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_cpu_st, use_container_width=True)
+        with col2:
+            if has_cpu_mt:
+                fig_cpu_mt.update_layout(
+                    barmode="group",
+                    title="CPU Multi-Thread — GFLOPS par taille de matrice",
+                    yaxis_title="GFLOPS",
+                    xaxis_title="Taille matrice",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_cpu_mt, use_container_width=True)
+
+        # Tableau détaillé CPU
+        cpu_table = {
+            "Résultat": [], "Test": [], "Taille": [],
+            "GFLOPS": [], "Médiane (ms)": [], "Écart-type (ms)": [],
+        }
+        for fname, data in loaded_data.items():
+            classic = data.get("classic_benchmarks", {}).get("benchmarks", {})
+            for test_key, test_label in [("cpu_single_thread", "Single-Thread"), ("cpu_multi_thread", "Multi-Thread")]:
+                results = classic.get(test_key, {}).get("results", {})
+                for sz, vals in results.items():
+                    cpu_table["Résultat"].append(result_labels[fname])
+                    cpu_table["Test"].append(test_label)
+                    cpu_table["Taille"].append(sz)
+                    cpu_table["GFLOPS"].append(round(vals.get("gflops", 0), 1))
+                    cpu_table["Médiane (ms)"].append(round(vals.get("median_s", 0) * 1000, 3))
+                    cpu_table["Écart-type (ms)"].append(round(vals.get("std_s", 0) * 1000, 3))
+        if cpu_table["Résultat"]:
+            st.dataframe(pd.DataFrame(cpu_table), use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════
     # Comparaison Mémoire
@@ -1946,6 +2006,25 @@ def _display_comparison(loaded_data: dict):
             legend_title="Résultat",
         )
         st.plotly_chart(fig_mem, use_container_width=True)
+
+        # Tableau détaillé mémoire
+        mem_table = {
+            "Résultat": [], "Opération": [],
+            "Bande passante (Go/s)": [], "Médiane (ms)": [],
+        }
+        for fname, data in loaded_data.items():
+            mem_res = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+                "memory_bandwidth", {}
+            ).get("results", {})
+            if mem_res:
+                for op_key, op_label in [("read", "Lecture"), ("write", "Écriture"), ("copy", "Copie")]:
+                    op = mem_res.get(op_key, {})
+                    mem_table["Résultat"].append(result_labels[fname])
+                    mem_table["Opération"].append(op_label)
+                    mem_table["Bande passante (Go/s)"].append(round(op.get("bandwidth_gb_s", 0), 2))
+                    mem_table["Médiane (ms)"].append(round(op.get("median_s", 0) * 1000, 3))
+        if mem_table["Résultat"]:
+            st.dataframe(pd.DataFrame(mem_table), use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════
     # Comparaison GPU Raw Compute
@@ -1986,6 +2065,27 @@ def _display_comparison(loaded_data: dict):
             legend_title="Résultat",
         )
         st.plotly_chart(fig_gpu, use_container_width=True)
+
+        # Tableau détaillé GPU Raw
+        gpu_raw_table = {
+            "Résultat": [], "GPU": [], "Taille": [],
+            "GFLOPS": [], "Médiane (ms)": [],
+        }
+        for fname, data in loaded_data.items():
+            gpu_b = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+                "gpu_compute", {}
+            )
+            if gpu_b.get("status") == "completed":
+                gpu_r = gpu_b.get("results", {})
+                gpu_dev = gpu_b.get("device", "?")
+                for sz, vals in gpu_r.items():
+                    gpu_raw_table["Résultat"].append(result_labels[fname])
+                    gpu_raw_table["GPU"].append(gpu_dev)
+                    gpu_raw_table["Taille"].append(sz)
+                    gpu_raw_table["GFLOPS"].append(round(vals.get("gflops", 0), 1))
+                    gpu_raw_table["Médiane (ms)"].append(round(vals.get("median_s", 0) * 1000, 3))
+        if gpu_raw_table["Résultat"]:
+            st.dataframe(pd.DataFrame(gpu_raw_table), use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════
     # Comparaison GPU System Score
@@ -2036,7 +2136,7 @@ def _display_comparison(loaded_data: dict):
         st.markdown("#### 🔄 Comparaison GPU System Score")
         fig_gpu_sys.update_layout(
             barmode="group",
-            title="GPU System Score — GFLOPS (pipeline end-to-end : CPU→GPU→calcul→CPU)",
+            title="GPU System Score — GFLOPS pipeline (end-to-end : CPU→GPU→calcul→CPU)",
             yaxis_title="GFLOPS",
             legend_title="Résultat",
         )
@@ -2050,31 +2150,100 @@ def _display_comparison(loaded_data: dict):
         )
         st.plotly_chart(fig_gpu_transfer, use_container_width=True)
 
-        # Tableau comparatif répartition du temps (plus grande matrice)
-        sys_table = {"Résultat": [], "GPU": [], "Pipeline (ms)": [], "CPU→GPU (ms)": [],
-                     "Calcul (ms)": [], "GPU→CPU (ms)": [], "% Calcul": [], "% Transfert": [],
-                     "GFLOPS pipeline": [], "Transfert (Go/s)": []}
+        # GFLOPS compute pur (comparaison intégrée au System Score)
+        fig_gpu_sys_compute = go.Figure()
         for fname, data in loaded_data.items():
-            gpu_sys_bench = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+            gsb = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
                 "gpu_system", {}
             )
-            if gpu_sys_bench.get("status") == "completed":
-                gpu_sys_results = gpu_sys_bench.get("results", {})
-                if gpu_sys_results:
-                    largest = list(gpu_sys_results.values())[-1]
-                    sys_table["Résultat"].append(result_labels[fname])
-                    sys_table["GPU"].append(gpu_sys_bench.get("device", "?"))
-                    sys_table["Pipeline (ms)"].append(round(largest.get("pipeline_median_s", 0) * 1000, 2))
-                    sys_table["CPU→GPU (ms)"].append(round(largest.get("transfer_to_median_s", 0) * 1000, 2))
-                    sys_table["Calcul (ms)"].append(round(largest.get("compute_median_s", 0) * 1000, 2))
-                    sys_table["GPU→CPU (ms)"].append(round(largest.get("transfer_back_median_s", 0) * 1000, 2))
-                    sys_table["% Calcul"].append(f"{largest.get('pct_compute', 0)}%")
-                    pct_t = round(largest.get('pct_transfer_to', 0) + largest.get('pct_transfer_back', 0), 1)
-                    sys_table["% Transfert"].append(f"{pct_t}%")
-                    sys_table["GFLOPS pipeline"].append(largest.get("gflops_pipeline", 0))
-                    sys_table["Transfert (Go/s)"].append(largest.get("transfer_bandwidth_gb_s", 0))
+            if gsb.get("status") == "completed":
+                gsr = gsb.get("results", {})
+                if gsr:
+                    sizes = list(gsr.keys())
+                    compute_gflops = [gsr[s].get("gflops_compute", 0) for s in sizes]
+                    gpu_dev = gsb.get("device", "")
+                    gpu_idx_str = ""
+                    if gsb.get("gpu_index") is not None:
+                        gpu_idx_str = f" [GPU #{gsb['gpu_index']}]"
+                    tn = f"{result_labels[fname]}"
+                    if gpu_dev:
+                        tn += f" ({gpu_dev}{gpu_idx_str})"
+                    fig_gpu_sys_compute.add_trace(go.Bar(
+                        name=tn, x=sizes, y=compute_gflops,
+                        marker_color=result_colors[fname],
+                        text=[f"{v:.0f}" for v in compute_gflops],
+                        textposition="outside",
+                    ))
+        fig_gpu_sys_compute.update_layout(
+            barmode="group",
+            title="GPU System Score — GFLOPS calcul pur (matmul dans le pipeline)",
+            yaxis_title="GFLOPS",
+            legend_title="Résultat",
+        )
+        st.plotly_chart(fig_gpu_sys_compute, use_container_width=True)
+
+        # Répartition du temps par étape (stacked, pour chaque machine la plus grande taille)
+        time_chart = {"Machine": [], "Temps (ms)": [], "Étape": []}
+        for fname, data in loaded_data.items():
+            gsb = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+                "gpu_system", {}
+            )
+            if gsb.get("status") == "completed":
+                gsr = gsb.get("results", {})
+                if gsr:
+                    largest = list(gsr.values())[-1]
+                    label = result_labels[fname]
+                    time_chart["Machine"].append(label)
+                    time_chart["Temps (ms)"].append(round(largest.get("transfer_to_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⬆️ CPU → GPU")
+                    time_chart["Machine"].append(label)
+                    time_chart["Temps (ms)"].append(round(largest.get("compute_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⚙️ Calcul GPU")
+                    time_chart["Machine"].append(label)
+                    time_chart["Temps (ms)"].append(round(largest.get("transfer_back_median_s", 0) * 1000, 2))
+                    time_chart["Étape"].append("⬇️ GPU → CPU")
+        if time_chart["Machine"]:
+            fig_time_stack = px.bar(
+                time_chart,
+                x="Machine", y="Temps (ms)",
+                color="Étape",
+                barmode="stack",
+                title="Répartition du temps — plus grande matrice (stacked)",
+                color_discrete_sequence=["#667eea", "#FF6B6B", "#f093fb"],
+            )
+            st.plotly_chart(fig_time_stack, use_container_width=True)
+
+        # Tableau comparatif complet (toutes les tailles)
+        sys_table = {
+            "Résultat": [], "GPU": [], "Taille": [],
+            "Pipeline (ms)": [], "CPU→GPU (ms)": [],
+            "Calcul (ms)": [], "GPU→CPU (ms)": [],
+            "GFLOPS pipeline": [], "GFLOPS compute": [],
+            "Transfert (Go/s)": [],
+            "% Calcul": [], "% Transfert": [],
+        }
+        for fname, data in loaded_data.items():
+            gsb = data.get("classic_benchmarks", {}).get("benchmarks", {}).get(
+                "gpu_system", {}
+            )
+            if gsb.get("status") == "completed":
+                gsr = gsb.get("results", {})
+                if gsr:
+                    for sz, vals in gsr.items():
+                        sys_table["Résultat"].append(result_labels[fname])
+                        sys_table["GPU"].append(gsb.get("device", "?"))
+                        sys_table["Taille"].append(sz)
+                        sys_table["Pipeline (ms)"].append(round(vals.get("pipeline_median_s", 0) * 1000, 2))
+                        sys_table["CPU→GPU (ms)"].append(round(vals.get("transfer_to_median_s", 0) * 1000, 2))
+                        sys_table["Calcul (ms)"].append(round(vals.get("compute_median_s", 0) * 1000, 2))
+                        sys_table["GPU→CPU (ms)"].append(round(vals.get("transfer_back_median_s", 0) * 1000, 2))
+                        sys_table["GFLOPS pipeline"].append(round(vals.get("gflops_pipeline", 0), 1))
+                        sys_table["GFLOPS compute"].append(round(vals.get("gflops_compute", 0), 1))
+                        sys_table["Transfert (Go/s)"].append(round(vals.get("transfer_bandwidth_gb_s", 0), 2))
+                        sys_table["% Calcul"].append(f"{vals.get('pct_compute', 0)}%")
+                        pct_t = round(vals.get('pct_transfer_to', 0) + vals.get('pct_transfer_back', 0), 1)
+                        sys_table["% Transfert"].append(f"{pct_t}%")
         if sys_table["Résultat"]:
-            st.markdown("**Détail pour la plus grande matrice (4096×4096) :**")
             st.dataframe(pd.DataFrame(sys_table), use_container_width=True, hide_index=True)
 
     # ══════════════════════════════════════════════
@@ -2093,7 +2262,7 @@ def _display_comparison(loaded_data: dict):
         model_keys_sorted = sorted(all_models.keys())
         model_names_sorted = [all_models[k] for k in model_keys_sorted]
 
-        # Tokens/s
+        # Tokens/s et latence premier token
         fig_tps = go.Figure()
         fig_ftl = go.Figure()
         for fname, data in loaded_data.items():
@@ -2142,14 +2311,33 @@ def _display_comparison(loaded_data: dict):
             )
             st.plotly_chart(fig_ftl, use_container_width=True)
 
-        # Mémoire pic
+        # Latence inter-token et mémoire pic
+        fig_itl = go.Figure()
         fig_mem_ai = go.Figure()
         for fname, data in loaded_data.items():
             ai_results = data.get("ai_benchmarks", {}).get("results", {})
+            itl_values = []
             mem_values = []
             for model_key in model_keys_sorted:
-                summary = ai_results.get(model_key, {}).get("summary", {})
+                md = ai_results.get(model_key, {})
+                summary = md.get("summary", {})
                 mem_values.append(summary.get("peak_memory_gb", 0))
+                # Latence inter-token depuis les runs
+                runs = md.get("runs", [])
+                avg_itl = 0
+                successful_itls = [r.get("avg_inter_token_latency_ms", 0) for r in runs if r.get("success") and r.get("avg_inter_token_latency_ms")]
+                if successful_itls:
+                    avg_itl = sum(successful_itls) / len(successful_itls)
+                itl_values.append(avg_itl)
+
+            fig_itl.add_trace(go.Bar(
+                name=result_labels[fname],
+                x=model_names_sorted,
+                y=itl_values,
+                marker_color=result_colors[fname],
+                text=[f"{v:.1f}" if v > 0 else "" for v in itl_values],
+                textposition="outside",
+            ))
             fig_mem_ai.add_trace(go.Bar(
                 name=result_labels[fname],
                 x=model_names_sorted,
@@ -2158,21 +2346,34 @@ def _display_comparison(loaded_data: dict):
                 text=[f"{v:.2f}" if v > 0 else "" for v in mem_values],
                 textposition="outside",
             ))
-        fig_mem_ai.update_layout(
-            barmode="group",
-            title="Mémoire pic par modèle (Go)",
-            yaxis_title="Go",
-            legend_title="Résultat",
-            xaxis_title="Modèle",
-        )
-        st.plotly_chart(fig_mem_ai, use_container_width=True)
 
-        # Tableau comparatif
+        col3, col4 = st.columns(2)
+        with col3:
+            fig_itl.update_layout(
+                barmode="group",
+                title="Latence inter-token moyenne (ms)",
+                yaxis_title="ms",
+                legend_title="Résultat",
+                xaxis_title="Modèle",
+            )
+            st.plotly_chart(fig_itl, use_container_width=True)
+        with col4:
+            fig_mem_ai.update_layout(
+                barmode="group",
+                title="Mémoire pic par modèle (Go)",
+                yaxis_title="Go",
+                legend_title="Résultat",
+                xaxis_title="Modèle",
+            )
+            st.plotly_chart(fig_mem_ai, use_container_width=True)
+
+        # Tableau comparatif complet
         st.markdown("#### Tableau comparatif complet")
         ia_table = {
-            "Résultat": [], "Modèle": [], "Tokens/s": [],
-            "Latence 1er token (s)": [], "Mémoire pic (Go)": [],
-            "Stabilité": [],
+            "Résultat": [], "Modèle": [], "Backend": [],
+            "Tokens/s": [], "Écart-type": [],
+            "1er token (s)": [], "Inter-token (ms)": [],
+            "Mémoire pic (Go)": [], "Stabilité": [],
         }
         for fname, data in loaded_data.items():
             ai_results = data.get("ai_benchmarks", {}).get("results", {})
@@ -2181,13 +2382,17 @@ def _display_comparison(loaded_data: dict):
                 if summary:
                     ia_table["Résultat"].append(result_labels[fname])
                     ia_table["Modèle"].append(model_data.get("model", model_key))
-                    ia_table["Tokens/s"].append(summary.get("avg_tokens_per_second", 0))
-                    ia_table["Latence 1er token (s)"].append(
-                        summary.get("avg_first_token_latency_s", 0)
-                    )
-                    ia_table["Mémoire pic (Go)"].append(
-                        summary.get("peak_memory_gb", 0)
-                    )
+                    backend_str = model_data.get("backend", {}).get("backend", "?")
+                    ia_table["Backend"].append(backend_str.upper())
+                    ia_table["Tokens/s"].append(round(summary.get("avg_tokens_per_second", 0), 2))
+                    ia_table["Écart-type"].append(round(summary.get("std_tokens_per_second", 0), 2))
+                    ia_table["1er token (s)"].append(round(summary.get("avg_first_token_latency_s", 0), 4))
+                    # Calcul latence inter-token
+                    runs = model_data.get("runs", [])
+                    successful_itls = [r.get("avg_inter_token_latency_ms", 0) for r in runs if r.get("success") and r.get("avg_inter_token_latency_ms")]
+                    avg_itl = round(sum(successful_itls) / len(successful_itls), 2) if successful_itls else 0
+                    ia_table["Inter-token (ms)"].append(avg_itl)
+                    ia_table["Mémoire pic (Go)"].append(round(summary.get("peak_memory_gb", 0), 3))
                     ia_table["Stabilité"].append(summary.get("stability", "?"))
         if ia_table["Résultat"]:
             st.dataframe(
@@ -2229,9 +2434,12 @@ def _display_comparison(loaded_data: dict):
                 model_key, {}
             ).get(q, {}).get("bits", 0))
 
-            # Tokens/s par quantification, par machine
+            # Tokens/s et mémoire pic par quantification, par machine
             fig_q_tps = go.Figure()
             fig_q_mem = go.Figure()
+            fig_q_ftl = go.Figure()
+            fig_q_load = go.Figure()
+            fig_q_itl = go.Figure()
 
             for fname, data in loaded_data.items():
                 comp = data.get("ai_benchmarks", {}).get(
@@ -2241,26 +2449,55 @@ def _display_comparison(loaded_data: dict):
 
                 tps_vals = []
                 mem_vals = []
+                ftl_vals = []
+                load_vals = []
+                itl_vals = []
                 for qk in quant_sorted:
                     qr = results.get(qk, {})
                     summary = qr.get("summary", {})
                     tps_vals.append(summary.get("avg_tokens_per_second", 0))
                     mem_vals.append(summary.get("peak_memory_gb", 0))
+                    ftl_vals.append(summary.get("avg_first_token_latency_s", 0))
+                    load_vals.append(qr.get("model_load_time_s", 0))
+                    # Latence inter-token
+                    runs = qr.get("runs", [])
+                    successful_itls = [r.get("avg_inter_token_latency_ms", 0) for r in runs if r.get("success") and r.get("avg_inter_token_latency_ms")]
+                    avg_itl = sum(successful_itls) / len(successful_itls) if successful_itls else 0
+                    itl_vals.append(avg_itl)
 
                 fig_q_tps.add_trace(go.Bar(
                     name=result_labels[fname],
-                    x=quant_sorted,
-                    y=tps_vals,
+                    x=quant_sorted, y=tps_vals,
                     marker_color=result_colors[fname],
                     text=[f"{v:.1f}" if v > 0 else "" for v in tps_vals],
                     textposition="outside",
                 ))
                 fig_q_mem.add_trace(go.Bar(
                     name=result_labels[fname],
-                    x=quant_sorted,
-                    y=mem_vals,
+                    x=quant_sorted, y=mem_vals,
                     marker_color=result_colors[fname],
                     text=[f"{v:.2f}" if v > 0 else "" for v in mem_vals],
+                    textposition="outside",
+                ))
+                fig_q_ftl.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=quant_sorted, y=ftl_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.3f}" if v > 0 else "" for v in ftl_vals],
+                    textposition="outside",
+                ))
+                fig_q_load.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=quant_sorted, y=load_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in load_vals],
+                    textposition="outside",
+                ))
+                fig_q_itl.add_trace(go.Bar(
+                    name=result_labels[fname],
+                    x=quant_sorted, y=itl_vals,
+                    marker_color=result_colors[fname],
+                    text=[f"{v:.1f}" if v > 0 else "" for v in itl_vals],
                     textposition="outside",
                 ))
 
@@ -2284,12 +2521,102 @@ def _display_comparison(loaded_data: dict):
                 )
                 st.plotly_chart(fig_q_mem, use_container_width=True)
 
+            col3, col4 = st.columns(2)
+            with col3:
+                fig_q_ftl.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Latence 1er token par quantification",
+                    yaxis_title="Secondes",
+                    xaxis_title="Quantification",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_q_ftl, use_container_width=True)
+            with col4:
+                fig_q_load.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Temps de chargement par quantification",
+                    yaxis_title="Secondes",
+                    xaxis_title="Quantification",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_q_load, use_container_width=True)
+
+            # Latence inter-token si des données existent
+            has_itl = any(
+                any(r.get("avg_inter_token_latency_ms", 0) for r in
+                    data.get("ai_benchmarks", {}).get("quantization_comparison", {}).get(
+                        model_key, {}
+                    ).get("results", {}).get(qk, {}).get("runs", [])
+                    if r.get("success"))
+                for fname, data in loaded_data.items()
+                for qk in quant_sorted
+            )
+            if has_itl:
+                fig_q_itl.update_layout(
+                    barmode="group",
+                    title=f"{model_name} — Latence inter-token par quantification",
+                    yaxis_title="ms",
+                    xaxis_title="Quantification",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_q_itl, use_container_width=True)
+
+            # Scatter taille fichier vs tokens/s (multi-machine)
+            fig_scatter = go.Figure()
+            for fname, data in loaded_data.items():
+                comp = data.get("ai_benchmarks", {}).get(
+                    "quantization_comparison", {}
+                ).get(model_key, {})
+                results = comp.get("results", {})
+                scatter_x = []
+                scatter_y = []
+                scatter_text = []
+                scatter_bits = []
+                for qk in quant_sorted:
+                    qr = results.get(qk, {})
+                    summary = qr.get("summary", {})
+                    if summary:
+                        file_size = qr.get("actual_file_size_gb", qr.get("file_size_gb", 0))
+                        tps = summary.get("avg_tokens_per_second", 0)
+                        if file_size > 0 and tps > 0:
+                            scatter_x.append(file_size)
+                            scatter_y.append(tps)
+                            scatter_text.append(qk)
+                            scatter_bits.append(qr.get("bits", 0))
+                if scatter_x:
+                    fig_scatter.add_trace(go.Scatter(
+                        x=scatter_x, y=scatter_y,
+                        mode="markers+text",
+                        name=result_labels[fname],
+                        marker=dict(
+                            size=[b * 4 + 8 for b in scatter_bits],
+                            color=result_colors[fname],
+                        ),
+                        text=scatter_text,
+                        textposition="top center",
+                        hovertemplate=(
+                            f"<b>{result_labels[fname]}</b><br>"
+                            "%{text}<br>"
+                            "Taille : %{x:.2f} Go<br>"
+                            "Tokens/s : %{y:.1f}<br>"
+                            "<extra></extra>"
+                        ),
+                    ))
+            if fig_scatter.data:
+                fig_scatter.update_layout(
+                    title=f"{model_name} — Taille fichier vs performance",
+                    xaxis_title="Taille du fichier (Go)",
+                    yaxis_title="Tokens/s",
+                    legend_title="Résultat",
+                )
+                st.plotly_chart(fig_scatter, use_container_width=True)
+
             # Tableau comparatif quantification multi-machine
             qt_table = {
                 "Résultat": [], "Quantification": [], "Bits": [],
                 "Taille (Go)": [], "Tokens/s": [],
-                "1er token (s)": [], "Mémoire pic (Go)": [],
-                "Chargement (s)": [],
+                "1er token (s)": [], "Inter-token (ms)": [],
+                "Mémoire pic (Go)": [], "Chargement (s)": [],
             }
             for fname, data in loaded_data.items():
                 comp = data.get("ai_benchmarks", {}).get(
@@ -2306,15 +2633,20 @@ def _display_comparison(loaded_data: dict):
                         qt_table["Taille (Go)"].append(
                             round(qr.get("actual_file_size_gb", qr.get("file_size_gb", 0)), 3)
                         )
-                        qt_table["Tokens/s"].append(summary.get("avg_tokens_per_second", 0))
+                        qt_table["Tokens/s"].append(round(summary.get("avg_tokens_per_second", 0), 2))
                         qt_table["1er token (s)"].append(
-                            summary.get("avg_first_token_latency_s", 0)
+                            round(summary.get("avg_first_token_latency_s", 0), 4)
                         )
+                        # Latence inter-token
+                        runs = qr.get("runs", [])
+                        successful_itls = [r.get("avg_inter_token_latency_ms", 0) for r in runs if r.get("success") and r.get("avg_inter_token_latency_ms")]
+                        avg_itl = round(sum(successful_itls) / len(successful_itls), 2) if successful_itls else 0
+                        qt_table["Inter-token (ms)"].append(avg_itl)
                         qt_table["Mémoire pic (Go)"].append(
-                            summary.get("peak_memory_gb", 0)
+                            round(summary.get("peak_memory_gb", 0), 3)
                         )
                         qt_table["Chargement (s)"].append(
-                            qr.get("model_load_time_s", 0)
+                            round(qr.get("model_load_time_s", 0), 2)
                         )
 
             if qt_table["Résultat"]:
