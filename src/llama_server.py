@@ -1397,6 +1397,7 @@ def run_all_server_benchmarks(
     prompt_type_models: Dict[str, List[str]] = None,
     server_manager: LlamaServerManager = None,
     progress_callback: Optional[Callable] = None,
+    selected_gpu: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """
     Exécute tous les benchmarks IA via llama-server.
@@ -1410,6 +1411,7 @@ def run_all_server_benchmarks(
         prompt_type_models: Dict {model_key: [pt_key, ...]}.
         server_manager: Instance LlamaServerManager configurée.
         progress_callback: Callback(progress, message).
+        selected_gpu: GPU sélectionné (optionnel).
 
     Returns:
         Dict au même format que run_all_ai_benchmarks().
@@ -1439,7 +1441,7 @@ def run_all_server_benchmarks(
             "reason": "Aucun modèle compatible.",
         }
 
-    backend_info = detect_best_backend()
+    backend_info = detect_best_backend(selected_gpu=selected_gpu, inference_mode="server")
     backend_info["inference_mode"] = "server"
 
     n_model_tasks = len(model_keys) if model_keys else 0

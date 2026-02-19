@@ -827,6 +827,7 @@ def page_benchmark():
                             prompt_type_models=pt_selections if pt_selections else None,
                             server_manager=srv,
                             progress_callback=ai_callback,
+                            selected_gpu=selected_gpu,
                         )
                     else:
                         # ── Mode llama-cpp-python classique ──

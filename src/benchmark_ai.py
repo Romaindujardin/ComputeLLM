@@ -255,7 +255,7 @@ def download_model(
 # Détection du backend optimal
 # =============================================================================
 
-def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
+def detect_best_backend(selected_gpu: Dict[str, Any] = None, inference_mode: str = "local") -> Dict[str, Any]:
     """
     Détecte le meilleur backend disponible pour l'inférence.
     Retourne des informations sur le backend sélectionné.
@@ -264,6 +264,9 @@ def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
     Args:
         selected_gpu: (Optionnel) Dict GPU provenant de detect_all_gpus().
                      Si fourni, utilise ce GPU au lieu de l'auto-détection.
+        inference_mode: "local" (llama-cpp-python) ou "server" (llama-server).
+                       En mode serveur, on peut utiliser des backends non supportés
+                       par les bindings Python (ex: Vulkan pour AMD sur Windows).
     """
     system = platform.system()
     machine = platform.machine()
@@ -310,17 +313,24 @@ def detect_best_backend(selected_gpu: Dict[str, Any] = None) -> Dict[str, Any]:
             result["details"] = f"GPU sélectionné : {gpu_name} (Metal)"
             return result
         elif backend == "directml":
-            # DirectML (Windows AMD) — llama-cpp-python ne supporte pas DirectML,
-            # on tente Vulkan via llama-server, sinon fallback CPU
-            result["backend"] = "cpu"
-            result["n_gpu_layers"] = 0
-            result["details"] = (
-                f"GPU sélectionné : {gpu_name} (DirectML) — "
-                f"llama-cpp-python ne supporte pas DirectML. "
-                f"Utilisez le mode llama-server avec un binaire Vulkan pour "
-                f"l'accélération GPU, sinon l'inférence se fait sur CPU."
-            )
-            return result
+            # DirectML (Windows AMD)
+            if inference_mode == "server":
+                # Mode Serveur : On suppose que le binaire supporte Vulkan (ou équivalent)
+                result["backend"] = "vulkan"  # Ou "gpu" générique
+                result["n_gpu_layers"] = -1
+                result["details"] = f"GPU sélectionné : {gpu_name} (Mode Serveur/Vulkan)"
+                return result
+            else:
+                # Mode Local (Python) : llama-cpp-python ne supporte pas DirectML
+                result["backend"] = "cpu"
+                result["n_gpu_layers"] = 0
+                result["details"] = (
+                    f"GPU sélectionné : {gpu_name} (DirectML) — "
+                    f"llama-cpp-python ne supporte pas DirectML. "
+                    f"Utilisez le mode llama-server avec un binaire Vulkan pour "
+                    f"l'accélération GPU."
+                )
+                return result
         else:
             # CPU explicitement choisi
             result["details"] = f"CPU sélectionné (pas d'accélération GPU)"
